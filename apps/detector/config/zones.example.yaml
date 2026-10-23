@@ -1,0 +1,9 @@
+# Red zones per camera, in frame pixel coordinates (x, y). A person is "inside"
+# when the bottom-centre of their bounding box (their feet) is inside or on the polygon.
+cameras:
+  cam1:
+    zones:
+      - name: forklift-lane
+        polygon: [[420, 360], [880, 360], [960, 720], [340, 720]]
+      - name: press-area
+        polygon: [[40, 400], [260, 400], [260, 700], [40, 700]]
