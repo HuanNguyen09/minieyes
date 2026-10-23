@@ -8,6 +8,11 @@ A simulated IP camera streams RTSP video to an **edge node**. A detector runs **
 
 The AI part is deliberately small (a pretrained model). The focus is the **DevOps platform** around it: infrastructure as code, GitOps delivery to edge sites, observability and failure handling.
 
+## Planning
+
+- [Product requirements (PRD)](PRD.md)
+- [Issues by milestone](https://github.com/HuanNguyen09/minieyes/milestones): each `type:tdd` issue lists the behaviours to build test-first.
+
 ## Architecture
 
 ```mermaid
