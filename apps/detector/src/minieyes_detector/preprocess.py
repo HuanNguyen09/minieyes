@@ -14,6 +14,8 @@ class Letterbox:
     scale: float
     pad_x: int
     pad_y: int
+    width: int  # original frame size, used to clip boxes
+    height: int
 
     def to_original(
         self, bbox: tuple[float, float, float, float]
@@ -40,4 +42,4 @@ def letterbox(frame_bgr: np.ndarray, size: int = MODEL_SIZE) -> tuple[np.ndarray
 
     rgb = canvas[:, :, ::-1]
     tensor = rgb.transpose(2, 0, 1)[np.newaxis].astype(np.float32) / 255.0
-    return tensor, Letterbox(scale, pad_x, pad_y)
+    return tensor, Letterbox(scale, pad_x, pad_y, width, height)
