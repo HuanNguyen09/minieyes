@@ -1,0 +1,36 @@
+# Terraform
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+*.auto.tfvars
+terraform.tfvars
+override.tf
+override.tf.json
+
+# Secrets and credentials
+.env
+*.pem
+*.key
+kubeconfig*
+**/secrets/*
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Models and media (downloaded or generated locally)
+*.pt
+*.onnx
+*.engine
+*.mp4
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
