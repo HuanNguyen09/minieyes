@@ -53,17 +53,17 @@ Key scenarios:
 - FR-TRI-3 Health (`/v2/health/ready`, port 8000), gRPC (8001) and metrics (8002) are reachable.
 
 ### 5.3 Detector (`apps/detector`)
-- FR-DET-1 **Frame source:** read frames from RTSP; on failure reconnect with exponential backoff (base 1 s, cap 30 s, jitter); expose `minieyes_camera_up{camera}`.
+- FR-DET-1 **Frame source:** read frames from RTSP on a background thread that keeps **only the latest frame** (stale frames are dropped so latency never accumulates when inference is slower than the stream); on failure reconnect with exponential backoff (base 1 s, cap 30 s, jitter); expose `minieyes_camera_up{camera}`.
 - FR-DET-2 **Preprocess:** letterbox to 640×640, RGB, CHW, float32 [0,1]; keep the scale/padding to map boxes back.
 - FR-DET-3 **Inference client:** abstract `InferenceClient`; Triton gRPC implementation with timeout and readiness check.
 - FR-DET-4 **Postprocess:** decode YOLOv8 output, keep class `person`, confidence ≥ threshold (default 0.4), NMS (IoU 0.5), map boxes to original frame coordinates.
 - FR-DET-5 **Zone rule:** zones are polygons in frame pixel coordinates loaded from YAML; a detection is *inside* when its **bottom-centre point** (feet) is inside the polygon. Invalid config fails fast with a clear error.
 - FR-DET-6 **Debounce/cooldown:** raise an intrusion only after **N consecutive frames** (default 2) inside the zone; then suppress repeats for the same `(camera, zone)` for a **cooldown** (default 10 s).
-- FR-DET-7 **Event publishing:** POST events to the Event API with an idempotency key; retry with backoff; buffer up to 1,000 events in memory while the API is down; drop oldest when full and count drops.
+- FR-DET-7 **Event publishing:** POST events to the Event API with an idempotency key and the site's API key in the `X-API-Key` header; retry with backoff; buffer up to 1,000 events in memory while the API is down; drop oldest when full and count drops.
 - FR-DET-8 **Observability:** Prometheus metrics (§7.2), JSON logs with `camera`, `zone`, `event_id`; `/healthz` and `/metrics` HTTP endpoints.
 
 ### 5.4 Event API (`apps/event-api`)
-- FR-API-1 `POST /events` validates and stores an event; repeated `event_id` returns `200` without duplicating (idempotent), first insert returns `201`.
+- FR-API-1 `POST /events` requires a valid `X-API-Key` (one key per site, `401` otherwise), validates and stores an event; repeated `event_id` returns `200` without duplicating (idempotent), first insert returns `201`.
 - FR-API-2 `GET /events` filters by `site`, `camera`, `zone`, time range; paginated, newest first.
 - FR-API-3 `GET /healthz` (process alive), `GET /readyz` (DB reachable), `GET /metrics`.
 - FR-API-4 PostgreSQL in deployed environments; schema managed by migrations.
@@ -84,12 +84,13 @@ Event schema:
 ```
 
 ### 5.5 Platform
-- FR-PLT-1 **Terraform** (`infra/terraform`): S3 remote state (versioned, encrypted, public access blocked); `cloud-vpc` and `site-vpc` with no peering; EKS with a Spot managed node group; ECR repos with scan-on-push; edge EC2 (t3.large, gp3 40 GB, EIP, SSH only from an allow-listed IP); IAM OIDC role for GitHub Actions restricted to this repo; Argo CD installed on EKS via the Helm provider.
-- FR-PLT-2 **Ansible** (`infra/ansible`): roles `common` (updates, SSH hardening, ufw), `k3s`, `node_exporter`, `argocd`; second run reports **zero changes**.
+- FR-PLT-1 **Terraform** (`infra/terraform`): S3 remote state (versioned, encrypted, public access blocked); `cloud-vpc` and `site-vpc` with no peering; EKS with a Spot managed node group; ECR repos with scan-on-push; EKS add-on `aws-ebs-csi-driver` (Pod Identity) with a default `gp3` StorageClass; EKS public API endpoint restricted to the admin CIDR; edge EC2 (**m6i.large** — non-burstable CPU for sustained inference — gp3 40 GB, EIP, IMDSv2, SSH only from the admin CIDR, **instance profile with ECR read-only**); GitHub OIDC roles: a **push role** trusted only for `refs/heads/main` and a **read-only plan role** for pull requests; Argo CD installed on EKS via the Helm provider.
+- FR-PLT-2 **Ansible** (`infra/ansible`): roles `common` (updates, SSH hardening, ufw), `k3s` (installed with `--disable traefik --disable servicelb`, kubelet configured with **`ecr-credential-provider`** so pulls from private ECR use the instance profile instead of 12-hour tokens), `node_exporter`, `argocd` (deploy key for the GitOps repo from Ansible Vault if the repo is private); second run reports **zero changes**.
 - FR-PLT-3 **Helm** (`charts/`): one chart per service with probes, resources, non-root `securityContext`, configurable via values per environment/site.
-- FR-PLT-4 **CI** (GitHub Actions): on PR — lint, unit tests, build, Trivy (fail on CRITICAL), `helm lint`/unittest, `terraform fmt/validate/test`, `promtool test rules`; on `main` — push images to ECR (tag = git SHA) via OIDC and commit the tag to the GitOps repo.
+- FR-PLT-4 **CI** (GitHub Actions): on PR — lint, unit tests, build, Trivy (fail on CRITICAL), `helm lint`/unittest, `terraform fmt/validate/test`, `promtool test rules`; on `main` — push images to ECR (tag = git SHA, skipped if the immutable tag already exists) via OIDC and commit the tag to the GitOps repo using a dedicated deploy key / GitHub App token with write access to that repo only.
 - FR-PLT-5 **GitOps** (`minieyes-gitops`): App of Apps for `clusters/cloud` and `sites/site-01`; `selfHeal` and `prune` enabled.
-- FR-PLT-6 **Observability:** kube-prometheus-stack on EKS with remote-write receiver behind TLS + basic auth; Prometheus **agent mode** at the edge adding `site` label; Loki on EKS with Grafana Alloy at the edge; Grafana dashboards and alert rules stored as code; Alertmanager → Telegram with grouping and inhibition.
+- FR-PLT-6 **Observability:** kube-prometheus-stack on EKS with remote-write receiver; Loki on EKS (single binary, PVC storage); at the edge a **single Grafana Alloy agent** scrapes metrics (detector, Triton, node_exporter, kube-state-metrics deployed at the edge) and ships pod logs, adding `site` as an external label; Grafana dashboards and alert rules stored as code; Alertmanager → Telegram with grouping and inhibition.
+- FR-PLT-8 **Ingress & TLS:** Traefik ingress controller on EKS behind one Network Load Balancer, cert-manager with Let's Encrypt. Hostnames live under `var.base_domain` — default `<nlb-ip>.sslip.io` (HTTP-01), or a Cloudflare-managed domain via DNS-01 when available. Exposed hosts: `events.` (Event API, API key), `metrics.` (remote-write, basic auth), `logs.` (Loki push, basic auth), `grafana.` (Grafana login). NLB source ranges allow only the edge EIP and the admin CIDR.
 - FR-PLT-7 **Security:** no plaintext secrets in Git (External Secrets + AWS Secrets Manager, or Sealed Secrets); default-deny NetworkPolicies; Pod Security `restricted` where possible; gitleaks in CI.
 
 ## 6. Non-functional requirements
@@ -137,9 +138,9 @@ Pure domain modules (`zones`, `postprocess`, `debounce`, `backoff`) have no I/O 
 | `HighInferenceLatency` | p95 `minieyes_inference_seconds` > 0.5 s | 5m |
 | `PodCrashLooping` | restarts increase > 3 in 15m | 0m |
 | `DiskWillFillIn24h` | `predict_linear` of free bytes < 0 in 24h | 30m |
-| `EdgeSiteSilent` | no `up` series for a `site` | 5m |
+| `EdgeSiteSilent` | site seen in the last hour but sending nothing now: `group by (site) (max_over_time(up[1h])) unless group by (site) (up)` | 5m |
 
-`EdgeSiteSilent` inhibits all other alerts with the same `site`.
+`EdgeSiteSilent` inhibits all other alerts with the same `site`. Because remote-written series stay visible for the 5-minute lookback after the last sample, expect detection about **10 minutes** after a site goes dark; this is acceptable for the lab and documented in the runbook.
 
 ## 8. Engineering approach: test-first
 
@@ -175,8 +176,8 @@ Work is split into GitHub issues; each issue lists **behaviours to drive with te
 | Milestone | Days | Exit criteria |
 |---|---|---|
 | **M0 Foundation** | 1 | Tooling, test harness, budget alarms |
-| **M1 App** | 2–3 | `docker compose up` → intrusion event stored; e2e test green |
-| **M2 Kubernetes** | 4–5 | Helm charts pass unittest; stack runs on local k3d |
+| **M1 App** | 2–4 | `docker compose up` → intrusion event stored; e2e test green |
+| **M2 Kubernetes** | 5 | Helm charts pass unittest; stack runs on local k3d |
 | **M3 Infrastructure** | 6–7 | `terraform apply` builds EKS + edge; Ansible idempotent |
 | **M4 Delivery** | 8–9 | Merge → running at edge in ≤ 10 min with no manual `kubectl` |
 | **M5 Observability** | 10–11 | Camera stop → Telegram alert ≤ 2 min; rule tests green |
@@ -199,7 +200,9 @@ Cut order if behind: HPA/load test → Terraform plan-on-PR → External Secrets
 | CPU inference too slow | 5 fps, single camera, YOLOv8n |
 | EKS destroy blocked by Kubernetes-created load balancers | Uninstall ingress/LoadBalancer services before `terraform destroy`; checklist in docs |
 | Hidden AWS costs | Budget alarms; no NAT Gateway; teardown checklist |
-| Scope vs 2 weeks | Cut order in §10 |
+| Scope vs 2 weeks (test-first effort is ~70–80 h, not 55–60 h) | Cut order in §10; `priority:should` issues are the first to go |
+| Burstable CPU throttling inference | Edge uses m6i.large, not t3 |
+| Edge cannot pull from private ECR (12-hour tokens) | Instance profile + kubelet `ecr-credential-provider` |
 
 ## 13. Licensing notes
 

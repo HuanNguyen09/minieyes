@@ -20,7 +20,7 @@ flowchart TB
   subgraph EDGE["Edge site · site-vpc · EC2 + k3s (outbound-only)"]
     CAM["Camera simulator<br/>MediaMTX + ffmpeg (RTSP)"] -->|RTSP| DET["Detector<br/>Python · OpenCV · red-zone rule"]
     DET <-->|gRPC| TRI["Triton Inference Server<br/>YOLOv8n ONNX (CPU)"]
-    AGT["Prometheus agent · Alloy"]
+    AGT["Grafana Alloy<br/>metrics + logs"]
     ARGOE["Argo CD (pulls from Git)"]
   end
 
@@ -78,7 +78,7 @@ CI never talks to a cluster. It pushes images to ECR and commits the new tag to 
 | 2 | Containers & Kubernetes: multi-stage images, Helm charts, probes, HPA | ⬜ Planned |
 | 3 | Terraform (VPC, EKS, ECR, edge EC2, OIDC) + Ansible edge bootstrap | ⬜ Planned |
 | 4 | GitHub Actions CI + Argo CD GitOps to edge and EKS | ⬜ Planned |
-| 5 | Observability: Prometheus agent + remote_write, Loki/Alloy, dashboards, alerts to Telegram | ⬜ Planned |
+| 5 | Observability: Alloy at the edge → Prometheus (remote_write) + Loki, dashboards, alerts to Telegram | ⬜ Planned |
 | 6 | Security hardening, failure drills, runbooks, postmortem | ⬜ Planned |
 
 ### Planned failure drills
@@ -106,7 +106,7 @@ docs/              architecture decisions, runbooks, postmortems
 
 - [ADR-001 — Run the lab on AWS](docs/adr/001-aws.md)
 - [ADR-002 — Pull-based GitOps for edge sites](docs/adr/002-pull-gitops-for-edge.md)
-- [ADR-003 — Prometheus agent mode at the edge](docs/adr/003-prometheus-agent-at-edge.md)
+- [ADR-003 — One Grafana Alloy agent at the edge](docs/adr/003-prometheus-agent-at-edge.md)
 
 ## How this project is built
 
