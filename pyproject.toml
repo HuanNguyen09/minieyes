@@ -1,0 +1,23 @@
+[project]
+name = "minieyes"
+version = "0.1.0"
+description = "MiniEyes workspace root"
+requires-python = ">=3.12"
+
+[tool.uv.workspace]
+members = ["apps/detector", "apps/event-api"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-cov>=5.0",
+    "ruff>=0.6",
+    "pre-commit>=3.8",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]

@@ -102,6 +102,21 @@ docs/              architecture decisions, runbooks, postmortems
 .github/workflows/ CI pipelines
 ```
 
+## Development
+
+Requires [uv](https://docs.astral.sh/uv/) (it installs Python 3.12 automatically).
+
+```bash
+uv sync --all-packages          # create .venv with both services and dev tools
+uv run pre-commit install       # ruff, whitespace, gitleaks on every commit
+make test                       # unit tests + coverage (or run the uv commands in the Makefile)
+make lint
+```
+
+Without `make` (e.g. Git Bash on Windows): `uv run --package minieyes-detector pytest apps/detector`.
+
+Test markers: unit tests run by default; `-m integration` needs Docker; `-m e2e` needs the compose stack.
+
 ## Design decisions
 
 - [ADR-001 — Run the lab on AWS](docs/adr/001-aws.md)
