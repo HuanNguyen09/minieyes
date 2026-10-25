@@ -19,3 +19,21 @@ secretGenerator:
       disableNameSuffixHash: true
       labels:
         app.kubernetes.io/part-of: minieyes
+
+# Grafana dashboards (#35), picked up by the kube-prometheus-stack Grafana sidecar.
+configMapGenerator:
+  - name: dashboard-minieyes-fleet
+    files: [dashboards/minieyes-fleet.json]
+    options: &dashboard
+      disableNameSuffixHash: true
+      labels:
+        grafana_dashboard: "1"
+        app.kubernetes.io/part-of: minieyes
+      annotations:
+        grafana_folder: MiniEyes
+  - name: dashboard-minieyes-detector
+    files: [dashboards/minieyes-detector.json]
+    options: *dashboard
+  - name: dashboard-minieyes-event-api
+    files: [dashboards/minieyes-event-api.json]
+    options: *dashboard
