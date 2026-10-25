@@ -21,9 +21,12 @@ params=$(python3 - "$payload" "$TIMEOUT" <<'PY'
 import json, sys
 payload, timeout = sys.argv[1], sys.argv[2]
 print(json.dumps({
-    "commands": [f"echo {payload} | base64 -d > /tmp/devbox-cmd.sh",
-                 "chmod 644 /tmp/devbox-cmd.sh",
-                 "sudo -iu ubuntu bash -eo pipefail /tmp/devbox-cmd.sh"],
+    # one file per run: bash reads a script while executing it, so a shared file would be
+    # overwritten under a concurrent run
+    "commands": ["f=$(mktemp /tmp/devbox-cmd.XXXXXX.sh)",
+                 f"echo {payload} | base64 -d > $f",
+                 "chmod 644 $f",
+                 "sudo -iu ubuntu bash -eo pipefail $f; rc=$?; rm -f $f; exit $rc"],
     "executionTimeout": [timeout],
 }))
 PY
