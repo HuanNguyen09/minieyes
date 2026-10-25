@@ -1,12 +1,25 @@
 """Event storage. One SQLAlchemy implementation serves SQLite (unit tests) and Postgres."""
 
+from dataclasses import dataclass
 from datetime import datetime
 
-from sqlalchemy import Engine, insert, select
+from sqlalchemy import Engine, and_, insert, or_, select
 from sqlalchemy.exc import IntegrityError
 
+from minieyes_api.cursor import Position
 from minieyes_api.db import events
 from minieyes_api.schemas import EventIn, EventOut
+
+
+@dataclass(frozen=True)
+class EventFilter:
+    """Conditions for listing events; None means "any"."""
+
+    site: str
+    camera: str | None = None
+    zone: str | None = None
+    since: datetime | None = None  # inclusive
+    until: datetime | None = None  # exclusive
 
 
 class EventRepository:
@@ -39,6 +52,34 @@ class EventRepository:
         with self._engine.connect() as conn:
             row = conn.execute(select(events).where(events.c.event_id == event_id)).first()
         return None if row is None else _to_event(row)
+
+    def page(
+        self, filters: EventFilter, limit: int, after: Position | None = None
+    ) -> tuple[list[EventOut], Position | None]:
+        """Up to `limit` events newest first, starting after `after`, and the position to
+        continue from (None on the last page). Ties on occurred_at are broken by row id, so
+        pages neither skip nor repeat events, even while newer ones arrive."""
+        t, row_id = events.c.occurred_at, events.c.id
+        query = select(events).order_by(t.desc(), row_id.desc()).limit(limit + 1)
+        for column in ("site", "camera", "zone"):
+            value = getattr(filters, column)
+            if value is not None:
+                query = query.where(events.c[column] == value)
+        if filters.since is not None:
+            query = query.where(t >= filters.since)
+        if filters.until is not None:
+            query = query.where(t < filters.until)
+        if after is not None:
+            query = query.where(
+                or_(t < after.occurred_at, and_(t == after.occurred_at, row_id < after.id))
+            )
+        with self._engine.connect() as conn:
+            rows = conn.execute(query).all()
+        if len(rows) <= limit:
+            return [_to_event(row) for row in rows], None
+        rows = rows[:limit]
+        last = rows[-1]._mapping
+        return [_to_event(row) for row in rows], Position(last["occurred_at"], last["id"])
 
 
 def _to_event(row) -> EventOut:

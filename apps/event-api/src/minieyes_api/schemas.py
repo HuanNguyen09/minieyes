@@ -32,3 +32,8 @@ class EventIn(BaseModel):
 
 class EventOut(EventIn):
     received_at: datetime
+
+
+class EventPage(BaseModel):
+    items: list[EventOut]
+    next: str | None = Field(description="Cursor for the next (older) page; null on the last.")
