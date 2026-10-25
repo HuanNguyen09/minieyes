@@ -1,20 +1,12 @@
 import numpy as np
 import pytest
+from fakes import raw_output
 
 from minieyes_detector.postprocess import postprocess
 from minieyes_detector.preprocess import Letterbox
 
 PERSON, CAR = 0, 2
 IDENTITY = Letterbox(scale=1.0, pad_x=0, pad_y=0, width=640, height=640)
-
-
-def raw_output(*candidates):
-    """Build a YOLOv8 output tensor (1, 84, 8400) from (cx, cy, w, h, class_id, score) tuples."""
-    out = np.zeros((1, 84, 8400), dtype=np.float32)
-    for i, (cx, cy, w, h, cls, score) in enumerate(candidates):
-        out[0, 0:4, i] = (cx, cy, w, h)
-        out[0, 4 + cls, i] = score
-    return out
 
 
 def test_person_candidate_is_decoded_from_centre_size_to_corners():

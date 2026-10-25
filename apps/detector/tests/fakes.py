@@ -108,3 +108,40 @@ class FakeTritonGrpc:
 
     def is_model_ready(self, model_name, **_):
         return self._model_ready
+
+
+def raw_output(*candidates):
+    """Build a YOLOv8 output tensor (1, 84, 8400) from (cx, cy, w, h, class_id, score) tuples."""
+    import numpy as np
+
+    out = np.zeros((1, 84, 8400), dtype=np.float32)
+    for i, (cx, cy, w, h, cls, score) in enumerate(candidates):
+        out[0, 0:4, i] = (cx, cy, w, h)
+        out[0, 4 + cls, i] = score
+    return out
+
+
+class FakeSource:
+    """FrameSource stand-in: latest() hands out queued frames once, then None."""
+
+    def __init__(self, frames=()):
+        self._frames = list(frames)
+
+    def push(self, frame) -> None:
+        self._frames.append(frame)
+
+    def latest(self):
+        return self._frames.pop(0) if self._frames else None
+
+
+class FakePublisher:
+    def __init__(self):
+        self.events = []
+        self.flushes = 0
+
+    def enqueue(self, camera, intrusion):
+        self.events.append((camera, intrusion))
+        return {"event_id": f"evt-{len(self.events)}"}
+
+    def flush(self) -> None:
+        self.flushes += 1
