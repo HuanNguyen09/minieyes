@@ -1,0 +1,12 @@
+# CI bumps image.tag (and the chart revision in apps/event-api.yaml) to the same app-repo SHA.
+image:
+  repository: ${AWS_ACCOUNT_ID}.dkr.ecr.ap-southeast-1.amazonaws.com/minieyes/event-api
+  tag: bca1de4b1adf9998fb93717e6e1df8c9dde381da
+ingress:
+  enabled: false  # events.<base_domain> is owned by the platform chart
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 4
+postgres:
+  storageClass: gp3

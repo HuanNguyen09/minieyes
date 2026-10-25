@@ -1,0 +1,13 @@
+site: site-01
+image:
+  repository: ${AWS_ACCOUNT_ID}.dkr.ecr.ap-southeast-1.amazonaws.com/minieyes/detector
+  tag: bca1de4b1adf9998fb93717e6e1df8c9dde381da
+eventApi:
+  url: https://events.${BASE_DOMAIN}
+cameras:
+  cam1: rtsp://camera-sim:8554/cam1
+zones:
+  cam1:
+    zones:
+      - name: walkway
+        polygon: [[0, 250], [768, 250], [768, 432], [0, 432]]

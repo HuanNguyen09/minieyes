@@ -1,0 +1,12 @@
+# Lists replace rather than merge in Helm, so the whole env list is restated per site.
+alloy:
+  extraEnv:
+    - name: MINIEYES_SITE
+      value: site-01
+    - name: MINIEYES_BASE_DOMAIN
+      value: ${BASE_DOMAIN}
+    - name: MINIEYES_PUSH_USER
+      valueFrom:
+        secretKeyRef:
+          name: alloy-push-credentials
+          key: username

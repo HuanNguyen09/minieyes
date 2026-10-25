@@ -1,0 +1,17 @@
+# App of Apps: Argo CD on this cluster syncs everything under sites/site-01/apps.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: site-01-root
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/HuanNguyen09/minieyes-gitops.git
+    targetRevision: main
+    path: sites/site-01/apps
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }

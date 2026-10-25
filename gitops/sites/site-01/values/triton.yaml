@@ -1,0 +1,2 @@
+model:
+  image: ${AWS_ACCOUNT_ID}.dkr.ecr.ap-southeast-1.amazonaws.com/minieyes/model-yolov8n:bca1de4b1adf9998fb93717e6e1df8c9dde381da

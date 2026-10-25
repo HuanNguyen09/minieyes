@@ -1,0 +1,3 @@
+image:
+  repository: ${AWS_ACCOUNT_ID}.dkr.ecr.ap-southeast-1.amazonaws.com/minieyes/camera-sim
+  tag: bca1de4b1adf9998fb93717e6e1df8c9dde381da

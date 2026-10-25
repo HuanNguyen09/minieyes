@@ -1,0 +1,7 @@
+baseDomain: ${BASE_DOMAIN}
+acme:
+  email: ${ACME_EMAIL}
+dns:
+  provider: ""  # "cloudflare" once a Cloudflare zone is used for baseDomain
+traefik:
+  sourceRanges: [${EDGE_EIP}/32, ${ADMIN_CIDR}]

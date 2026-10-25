@@ -1,0 +1,45 @@
+# CI of the minieyes-gitops repository (copied to .github/workflows/ by scripts/seed-gitops.sh).
+# Every PR: Application schemas, and every app-repo chart rendered with this repo's values at
+# the exact chart revision the Application pins.
+name: validate
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.16.2
+      - name: Install kubeconform
+        run: |
+          curl -fsSL https://github.com/yannh/kubeconform/releases/download/v0.8.0/kubeconform-linux-amd64.tar.gz \
+            | sudo tar xz -C /usr/local/bin kubeconform
+      - name: Application schemas
+        run: |
+          kubeconform -strict -summary -schema-location default \
+            -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+            $(find clusters sites -name '*.yaml' -path '*/apps/*') $(find clusters sites -name root.yaml)
+      - name: Render app-repo charts at their pinned revision
+        run: |
+          set -euo pipefail
+          for app in $(grep -l 'HuanNguyen09/minieyes.git' clusters/*/apps/*.yaml sites/*/apps/*.yaml); do
+            rev=$(yq '.spec.sources[] | select(.path | test("^charts/")) | .targetRevision' "$app")
+            path=$(yq '.spec.sources[] | select(.path | test("^charts/")) | .path' "$app")
+            [ -n "$path" ] || continue
+            values=$(yq '.spec.sources[] | select(.path | test("^charts/")) | .helm.valueFiles[]' "$app" | sed 's#^\$values/##')
+            rm -rf app && git clone -q https://github.com/HuanNguyen09/minieyes.git app
+            git -C app checkout -q "$rev"
+            args=(); for v in $values; do args+=(-f "$v"); done
+            echo "== $app ($path @ $rev)"
+            helm template "$(basename "$app" .yaml)" "app/$path" "${args[@]}" \
+              | kubeconform -strict -summary -schema-location default \
+                  -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' -
+          done
