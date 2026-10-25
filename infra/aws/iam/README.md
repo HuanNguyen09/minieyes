@@ -21,3 +21,18 @@ permissions. Production would add a permissions boundary on every role Terraform
 5. Check: `aws sts get-caller-identity --profile minieyes`.
 
 Rotate the key when the project ends, or delete the user after `terraform destroy`.
+
+## Dev box (preferred): an EC2 with an instance role, no access keys
+
+Claude Code runs on an EC2 instance whose role carries the same two policies, so Terraform
+uses short-lived instance credentials and no access key exists anywhere.
+
+1. AWS CloudShell in `ap-southeast-1`:
+   `git clone https://github.com/HuanNguyen09/minieyes && bash minieyes/infra/aws/iam/create-devbox-role.sh`
+   (creates `MiniEyesDeployerInfra`, `MiniEyesDeployerIam`, role + instance profile
+   `DevBox-MiniEyes-Claude` with `AmazonSSMManagedInstanceCore`).
+2. Launch the instance: Ubuntu 24.04, `t3.xlarge` (4 vCPU / 16 GiB), gp3 **100 GB** (Docker
+   images incl. Triton), IMDSv2 required, instance profile `DevBox-MiniEyes-Claude`,
+   tag `minieyes:protect=true` (the role cannot stop, terminate or re-role a protected instance),
+   security group with **no inbound rules** — connect with SSM Session Manager or EC2 Instance Connect.
+3. Stop it when idle (~0.21 USD/h running in Singapore; the EBS volume is billed while stopped).
