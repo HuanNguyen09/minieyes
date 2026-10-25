@@ -136,7 +136,11 @@ def alerts(alertmanager: str) -> dict[tuple[str, str, str], dict]:
     )
     got = _get(f"{alertmanager}/api/v2/alerts")
     return {
-        (a["labels"]["alertname"], a["labels"]["site"], a["labels"].get("camera", a["labels"]["severity"])): a
+        (
+            a["labels"]["alertname"],
+            a["labels"]["site"],
+            a["labels"].get("camera", a["labels"]["severity"]),
+        ): a
         for a in got
     }
 

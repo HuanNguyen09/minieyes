@@ -49,5 +49,7 @@ def test_every_runbook_url_points_at_an_existing_runbook():
 
 def test_prometheusrule_manifest_is_up_to_date():
     script = OBS / "scripts" / "build_prometheusrule.py"
-    result = subprocess.run([sys.executable, str(script), "--check"], capture_output=True, text=True)
+    result = subprocess.run(
+        [sys.executable, str(script), "--check"], capture_output=True, text=True
+    )
     assert result.returncode == 0, result.stderr
