@@ -43,3 +43,10 @@ resources:
 
 nodeSelector: {}
 tolerations: []
+
+networkPolicy:
+  enabled: true
+  monitoringNamespace: monitoring
+  # real IP cameras on the site LAN, e.g. [192.168.10.0/24]
+  cameraCIDRs: []
+  cameraPort: 554

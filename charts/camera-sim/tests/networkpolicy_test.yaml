@@ -1,0 +1,22 @@
+suite: camera-sim network policy
+templates:
+  - networkpolicy.yaml
+release:
+  name: camera-sim
+  namespace: minieyes
+tests:
+  - it: serves RTSP only to the detector and calls nothing
+    asserts:
+      - equal:
+          path: spec.policyTypes
+          value: [Ingress, Egress]
+      - equal:
+          path: spec.ingress
+          value:
+            - from:
+                - podSelector:
+                    matchLabels: { app.kubernetes.io/name: detector }
+              ports:
+                - { protocol: TCP, port: 8554 }
+      - notExists:
+          path: spec.egress

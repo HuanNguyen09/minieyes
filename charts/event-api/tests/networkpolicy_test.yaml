@@ -1,0 +1,83 @@
+suite: event-api network policies
+templates:
+  - networkpolicy.yaml
+release:
+  name: event-api
+  namespace: minieyes
+tests:
+  - it: denies everything not listed for the API pods
+    documentSelector:
+      path: metadata.name
+      value: event-api
+    asserts:
+      - equal:
+          path: spec.podSelector.matchLabels["app.kubernetes.io/name"]
+          value: event-api
+      - equal:
+          path: spec.policyTypes
+          value: [Ingress, Egress]
+
+  - it: accepts traffic only from the ingress controller and Prometheus
+    documentSelector:
+      path: metadata.name
+      value: event-api
+    asserts:
+      - lengthEqual:
+          path: spec.ingress
+          count: 1
+      - equal:
+          path: spec.ingress[0].from
+          value:
+            - namespaceSelector:
+                matchLabels: { kubernetes.io/metadata.name: traefik }
+            - namespaceSelector:
+                matchLabels: { kubernetes.io/metadata.name: monitoring }
+      - equal:
+          path: spec.ingress[0].ports
+          value:
+            - { protocol: TCP, port: 8000 }
+
+  - it: may reach only DNS and its Postgres
+    documentSelector:
+      path: metadata.name
+      value: event-api
+    asserts:
+      - lengthEqual:
+          path: spec.egress
+          count: 2
+      - contains:
+          path: spec.egress
+          content:
+            to:
+              - podSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: postgres
+                    app.kubernetes.io/instance: event-api
+            ports:
+              - { protocol: TCP, port: 5432 }
+
+  - it: lets only the API and its migration Job reach Postgres, and Postgres reach nothing
+    documentSelector:
+      path: metadata.name
+      value: event-api-postgres
+    asserts:
+      - equal:
+          path: spec.policyTypes
+          value: [Ingress, Egress]
+      - equal:
+          path: spec.ingress[0].from
+          value:
+            - podSelector:
+                matchLabels:
+                  app.kubernetes.io/name: event-api
+                  app.kubernetes.io/instance: event-api
+      - notExists:
+          path: spec.egress
+
+  - it: has no Postgres policy when Postgres is external
+    set:
+      postgres:
+        enabled: false
+    asserts:
+      - hasDocuments:
+          count: 1

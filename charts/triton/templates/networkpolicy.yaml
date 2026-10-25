@@ -1,0 +1,28 @@
+{{- if .Values.networkPolicy.enabled }}
+# Triton answers the detector and the metrics scraper, and initiates nothing.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}
+  labels:
+    app.kubernetes.io/name: triton
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/part-of: minieyes
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: triton
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: { app.kubernetes.io/name: detector }
+      ports:
+        - { protocol: TCP, port: 8001 }
+    - from:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: {{ .Values.networkPolicy.monitoringNamespace }} }
+      ports:
+        - { protocol: TCP, port: 8002 }
+{{- end }}

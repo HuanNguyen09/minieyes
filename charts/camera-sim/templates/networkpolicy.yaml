@@ -1,0 +1,23 @@
+{{- if .Values.networkPolicy.enabled }}
+# The simulated camera streams to the detector only and initiates nothing.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}
+  labels:
+    app.kubernetes.io/name: camera-sim
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/part-of: minieyes
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: camera-sim
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: { app.kubernetes.io/name: detector }
+      ports:
+        - { protocol: TCP, port: 8554 }
+{{- end }}

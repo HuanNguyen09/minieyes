@@ -1,0 +1,93 @@
+suite: detector network policy
+templates:
+  - networkpolicy.yaml
+release:
+  name: detector
+  namespace: minieyes
+tests:
+  - it: denies everything not listed, in both directions, for the detector pods
+    asserts:
+      - equal:
+          path: spec.podSelector.matchLabels["app.kubernetes.io/name"]
+          value: detector
+      - equal:
+          path: spec.policyTypes
+          value: [Ingress, Egress]
+
+  - it: accepts metrics scrapes only from the monitoring namespace
+    asserts:
+      - lengthEqual:
+          path: spec.ingress
+          count: 1
+      - equal:
+          path: spec.ingress[0].from[0].namespaceSelector.matchLabels["kubernetes.io/metadata.name"]
+          value: monitoring
+      - equal:
+          path: spec.ingress[0].ports[0].port
+          value: 8080
+
+  - it: may resolve DNS through kube-dns only
+    asserts:
+      - contains:
+          path: spec.egress
+          content:
+            to:
+              - namespaceSelector:
+                  matchLabels: { kubernetes.io/metadata.name: kube-system }
+                podSelector:
+                  matchLabels: { k8s-app: kube-dns }
+            ports:
+              - { protocol: UDP, port: 53 }
+              - { protocol: TCP, port: 53 }
+
+  - it: may reach Triton gRPC and the in-cluster camera
+    asserts:
+      - contains:
+          path: spec.egress
+          content:
+            to:
+              - podSelector:
+                  matchLabels: { app.kubernetes.io/name: triton }
+            ports:
+              - { protocol: TCP, port: 8001 }
+      - contains:
+          path: spec.egress
+          content:
+            to:
+              - podSelector:
+                  matchLabels: { app.kubernetes.io/name: camera-sim }
+            ports:
+              - { protocol: TCP, port: 8554 }
+
+  - it: may reach real cameras only on their configured CIDRs and RTSP port
+    set:
+      networkPolicy:
+        cameraCIDRs: [192.168.10.0/24]
+    asserts:
+      - contains:
+          path: spec.egress
+          content:
+            to:
+              - ipBlock: { cidr: 192.168.10.0/24 }
+            ports:
+              - { protocol: TCP, port: 554 }
+
+  - it: may reach the Event API over HTTPS on public addresses only
+    asserts:
+      - contains:
+          path: spec.egress
+          content:
+            to:
+              - ipBlock:
+                  cidr: 0.0.0.0/0
+                  except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16]
+            ports:
+              - { protocol: TCP, port: 443 }
+
+  - it: can be switched off
+    set:
+      networkPolicy:
+        enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0

@@ -1,0 +1,30 @@
+suite: triton network policy
+templates:
+  - networkpolicy.yaml
+release:
+  name: triton
+  namespace: minieyes
+tests:
+  - it: accepts gRPC only from the detector and metrics only from monitoring, and calls nothing
+    asserts:
+      - equal:
+          path: spec.policyTypes
+          value: [Ingress, Egress]
+      - contains:
+          path: spec.ingress
+          content:
+            from:
+              - podSelector:
+                  matchLabels: { app.kubernetes.io/name: detector }
+            ports:
+              - { protocol: TCP, port: 8001 }
+      - contains:
+          path: spec.ingress
+          content:
+            from:
+              - namespaceSelector:
+                  matchLabels: { kubernetes.io/metadata.name: monitoring }
+            ports:
+              - { protocol: TCP, port: 8002 }
+      - notExists:
+          path: spec.egress
