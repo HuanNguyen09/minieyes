@@ -107,9 +107,9 @@ run "managed_addons_and_ebs_csi_pod_identity" {
 
   assert {
     condition = toset(concat(keys(aws_eks_addon.before_nodes), keys(aws_eks_addon.after_nodes))) == toset([
-      "vpc-cni", "kube-proxy", "eks-pod-identity-agent", "coredns", "aws-ebs-csi-driver",
+      "vpc-cni", "kube-proxy", "eks-pod-identity-agent", "coredns", "aws-ebs-csi-driver", "metrics-server",
     ])
-    error_message = "Expected the managed add-ons vpc-cni, kube-proxy, eks-pod-identity-agent, coredns, aws-ebs-csi-driver."
+    error_message = "Expected the managed add-ons vpc-cni, kube-proxy, eks-pod-identity-agent, coredns, aws-ebs-csi-driver, metrics-server (the event-api HPA needs it)."
   }
 
   # The CNI must exist before nodes join, or they never become Ready.

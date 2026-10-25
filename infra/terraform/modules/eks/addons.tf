@@ -4,8 +4,9 @@
 locals {
   # Needed before nodes join: networking, kube-proxy and the Pod Identity agent (DaemonSets).
   addons_before_nodes = ["vpc-cni", "kube-proxy", "eks-pod-identity-agent"]
-  # Need schedulable nodes to become ACTIVE.
-  addons_after_nodes = ["coredns", "aws-ebs-csi-driver"]
+  # Need schedulable nodes to become ACTIVE. metrics-server feeds the event-api HPA; EKS does
+  # not ship it, and without it the HPA (and so the Argo CD app) stays Degraded.
+  addons_after_nodes = ["coredns", "aws-ebs-csi-driver", "metrics-server"]
 }
 
 data "aws_eks_addon_version" "this" {
