@@ -42,12 +42,16 @@ spec:
       ports:
         - { protocol: TCP, port: {{ $.Values.networkPolicy.cameraPort }} }
     {{- end }}
-    # Event API through the cloud load balancer: HTTPS to public addresses only.
+    # Event API through the cloud load balancer: by default HTTPS to public addresses only.
     # NetworkPolicy cannot match hostnames; private ranges stay blocked.
+    {{- with .Values.networkPolicy.eventApiEgress }}
     - to:
         - ipBlock:
-            cidr: 0.0.0.0/0
-            except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16]
+            cidr: {{ .cidr }}
+            {{- with .except }}
+            except: {{ toJson . }}
+            {{- end }}
       ports:
-        - { protocol: TCP, port: 443 }
+        - { protocol: TCP, port: {{ .port }} }
+    {{- end }}
 {{- end }}

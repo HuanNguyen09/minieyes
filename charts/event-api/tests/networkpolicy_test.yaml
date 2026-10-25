@@ -81,3 +81,21 @@ tests:
     asserts:
       - hasDocuments:
           count: 1
+
+  - it: can admit extra source ranges (k3d node port) without opening Postgres
+    set:
+      networkPolicy:
+        extraIngressCIDRs: [172.16.0.0/12]
+    asserts:
+      - contains:
+          path: spec.ingress
+          content:
+            from:
+              - ipBlock: { cidr: 172.16.0.0/12 }
+            ports:
+              - { protocol: TCP, port: 8000 }
+        documentIndex: 0
+      - lengthEqual:
+          path: spec.ingress
+          count: 1
+        documentIndex: 1

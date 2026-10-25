@@ -19,6 +19,14 @@ spec:
             matchLabels: { kubernetes.io/metadata.name: {{ .Values.networkPolicy.monitoringNamespace }} }
       ports:
         - { protocol: TCP, port: 8000 }
+    {{- with .Values.networkPolicy.extraIngressCIDRs }}
+    - from:
+        {{- range . }}
+        - ipBlock: { cidr: {{ . }} }
+        {{- end }}
+      ports:
+        - { protocol: TCP, port: 8000 }
+    {{- end }}
   egress:
     - to:
         - namespaceSelector:

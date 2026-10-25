@@ -91,3 +91,19 @@ tests:
     asserts:
       - hasDocuments:
           count: 0
+
+  - it: lets a lab point the Event API egress at another port and range
+    set:
+      networkPolicy:
+        eventApiEgress:
+          cidr: 172.16.0.0/12
+          except: []
+          port: 18081
+    asserts:
+      - contains:
+          path: spec.egress
+          content:
+            to:
+              - ipBlock: { cidr: 172.16.0.0/12 }
+            ports:
+              - { protocol: TCP, port: 18081 }

@@ -50,3 +50,8 @@ networkPolicy:
   # real IP cameras on the site LAN, e.g. [192.168.10.0/24]
   cameraCIDRs: []
   cameraPort: 554
+  # where the Event API is reached; a lab (k3d) overrides this
+  eventApiEgress:
+    cidr: 0.0.0.0/0
+    except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16]
+    port: 443

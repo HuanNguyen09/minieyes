@@ -54,3 +54,5 @@ networkPolicy:
   monitoringNamespace: monitoring
   # used only when postgres.enabled=false
   externalDatabaseCIDR: 10.0.0.0/16
+  # extra sources allowed to reach the API (k3d NodePort); empty in real clusters
+  extraIngressCIDRs: []
