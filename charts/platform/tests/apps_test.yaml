@@ -9,7 +9,9 @@ set:
   traefik:
     sourceRanges: [198.51.100.7/32, 203.0.113.0/28]
 tests:
-  - it: installs a pinned Traefik behind an NLB reachable only from the edge EIP and admin CIDR
+  # HTTP-01 needs port 80 open to Let's Encrypt, so the NLB is not source-restricted; client
+  # IPs are kept (externalTrafficPolicy Local) and filtered per route by the ip-allowlist middleware.
+  - it: installs a pinned Traefik behind an NLB that keeps client source IPs
     documentSelector:
       path: metadata.name
       value: traefik
@@ -18,8 +20,10 @@ tests:
           path: spec.source.targetRevision
           value: 41.6.1
       - equal:
+          path: spec.source.helm.valuesObject.service.spec.externalTrafficPolicy
+          value: Local
+      - notExists:
           path: spec.source.helm.valuesObject.service.spec.loadBalancerSourceRanges
-          value: [198.51.100.7/32, 203.0.113.0/28]
       - equal:
           path: spec.source.helm.valuesObject.service.annotations["service.beta.kubernetes.io/aws-load-balancer-type"]
           value: nlb

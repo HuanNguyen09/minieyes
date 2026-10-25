@@ -11,3 +11,23 @@ spec:
   basicAuth:
     secret: {{ .Values.pushBasicAuthSecret }}
     removeHeader: true
+{{- /*
+Source-IP filtering lives here, at L7, instead of on the NLB: Let's Encrypt's HTTP-01 validators
+must reach port 80, and cert-manager's solver route carries none of these middlewares. Traefik
+sees real client IPs because its Service uses externalTrafficPolicy Local.
+*/}}
+{{- range $ns := list .Values.routes.events.namespace .Values.routes.metrics.namespace }}
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: ip-allowlist
+  namespace: {{ $ns }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  ipAllowList:
+    sourceRange:
+      {{- toYaml $.Values.traefik.sourceRanges | nindent 6 }}
+{{- end }}

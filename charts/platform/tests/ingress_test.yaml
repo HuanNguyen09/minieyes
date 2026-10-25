@@ -69,20 +69,27 @@ tests:
           value: /loki/api/v1/push
         documentIndex: 2
 
-  - it: puts basic auth on metrics and logs, and none on events (the API checks X-API-Key)
+  # Source IPs are filtered at L7 (Traefik ipAllowList), not on the NLB: Let's Encrypt must reach
+  # the HTTP-01 solver route, which cert-manager creates without these middlewares.
+  - it: allow-lists every host, and adds basic auth on metrics and logs only (events checks X-API-Key)
     template: ingresses.yaml
     asserts:
-      - notExists:
+      - equal:
           path: metadata.annotations["traefik.ingress.kubernetes.io/router.middlewares"]
+          value: minieyes-ip-allowlist@kubernetescrd
         documentIndex: 0
       - equal:
           path: metadata.annotations["traefik.ingress.kubernetes.io/router.middlewares"]
-          value: monitoring-push-basic-auth@kubernetescrd
+          value: monitoring-ip-allowlist@kubernetescrd,monitoring-push-basic-auth@kubernetescrd
         documentIndex: 1
       - equal:
           path: metadata.annotations["traefik.ingress.kubernetes.io/router.middlewares"]
-          value: monitoring-push-basic-auth@kubernetescrd
+          value: monitoring-ip-allowlist@kubernetescrd,monitoring-push-basic-auth@kubernetescrd
         documentIndex: 2
+      - equal:
+          path: metadata.annotations["traefik.ingress.kubernetes.io/router.middlewares"]
+          value: monitoring-ip-allowlist@kubernetescrd
+        documentIndex: 3
 
   - it: gives every Ingress TLS and a cert-manager cluster issuer
     template: ingresses.yaml
@@ -95,6 +102,9 @@ tests:
 
   - it: takes basic-auth users from a Secret, never from values
     template: middleware.yaml
+    documentSelector:
+      path: metadata.name
+      value: push-basic-auth
     asserts:
       - equal:
           path: spec.basicAuth.secret
@@ -110,3 +120,27 @@ tests:
     asserts:
       - failedTemplate:
           errorPattern: "baseDomain is required"
+
+  - it: allow-lists the edge EIP and admin CIDR in both namespaces
+    template: middleware.yaml
+    set:
+      traefik:
+        sourceRanges: [198.51.100.7/32, 203.0.113.0/28]
+    asserts:
+      # documents: 0 push-basic-auth, 1 ip-allowlist (minieyes), 2 ip-allowlist (monitoring)
+      - equal:
+          path: metadata.namespace
+          value: minieyes
+        documentIndex: 1
+      - equal:
+          path: spec.ipAllowList.sourceRange
+          value: [198.51.100.7/32, 203.0.113.0/28]
+        documentIndex: 1
+      - equal:
+          path: metadata.namespace
+          value: monitoring
+        documentIndex: 2
+      - equal:
+          path: spec.ipAllowList.sourceRange
+          value: [198.51.100.7/32, 203.0.113.0/28]
+        documentIndex: 2

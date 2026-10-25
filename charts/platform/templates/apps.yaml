@@ -63,9 +63,9 @@ spec:
             service.beta.kubernetes.io/aws-load-balancer-type: nlb
             service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
           spec:
-            externalTrafficPolicy: Local  # keep client IPs so the source ranges apply
-            loadBalancerSourceRanges:
-              {{- toYaml .Values.traefik.sourceRanges | nindent 14 }}
+            # keep client IPs: the ip-allowlist middleware filters on them. The NLB itself stays
+            # open because Let's Encrypt's HTTP-01 validators must reach port 80.
+            externalTrafficPolicy: Local
         metrics:
           prometheus:
             serviceMonitor:

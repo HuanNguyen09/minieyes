@@ -17,7 +17,8 @@ dns:
 traefik:
   chartVersion: 41.6.1
   namespace: traefik
-  # edge EIP /32 and the admin CIDR; never 0.0.0.0/0
+  # clients allowed on every host (ip-allowlist middleware): edge EIP /32 and the admin CIDR;
+  # never 0.0.0.0/0. Let's Encrypt still reaches the ACME solver route.
   sourceRanges: []
 
 certManager:
