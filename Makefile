@@ -22,6 +22,7 @@ test-tf:
 test-rules:
 	promtool check rules observability/alerts/*.rules.yaml
 	promtool test rules observability/alerts/tests/*.yaml
+	bash observability/alertmanager/test.sh
 	uv run --no-project --with pytest --with pyyaml pytest observability -q
 
 e2e:
