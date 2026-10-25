@@ -1,0 +1,9 @@
+# Allow-list: only lockfiles, package manifests and source reach the build context.
+# Tests, models, videos, infra and secrets never do.
+*
+!pyproject.toml
+!uv.lock
+!apps/*/pyproject.toml
+!apps/*/src/
+**/__pycache__
+**/*.py[cod]
