@@ -1,6 +1,6 @@
 # MiniEyes — Edge AI Video Analytics Platform
 
-> 🚧 **Work in progress** — building in public. Target completion: November 2026. See [Roadmap](#roadmap) for current status.
+> ✅ **Deployed end to end on AWS** (2026-10-25): edge k3s on EC2 running Triton + the detector, events over HTTPS (Let's Encrypt) to an Event API on EKS, metrics and logs via Alloy into Prometheus and Loki, everything delivered by Argo CD from [minieyes-gitops](https://github.com/HuanNguyen09/minieyes-gitops). See [Roadmap](#roadmap) and the operations handbook ([Vietnamese](docs/BAO-CAO-DU-AN.md)).
 
 MiniEyes is a small, end-to-end **edge AI video analytics platform** built to practise running AI workloads the way production edge fleets run them.
 
@@ -73,17 +73,18 @@ CI never talks to a cluster. It pushes images to ECR and commits the new tag to 
 
 | # | Phase | Status |
 |---|---|---|
-| 0 | Tooling, AWS budget alarms, repo skeleton | 🟡 In progress |
-| 1 | App: camera simulator, Triton + YOLOv8n, detector, event API (docker compose) | ⬜ Planned |
-| 2 | Containers & Kubernetes: multi-stage images, Helm charts, probes, HPA | ⬜ Planned |
-| 3 | Terraform (VPC, EKS, ECR, edge EC2, OIDC) + Ansible edge bootstrap | ⬜ Planned |
-| 4 | GitHub Actions CI + Argo CD GitOps to edge and EKS | ⬜ Planned |
-| 5 | Observability: Alloy at the edge → Prometheus (remote_write) + Loki, dashboards, alerts to Telegram | ⬜ Planned |
-| 6 | Security hardening, failure drills, runbooks, postmortem | ⬜ Planned |
+| 0 | Tooling, AWS budget alarms, least-privilege IAM (boundary, guardrails, no Bedrock), SSM-only dev box | ✅ Done |
+| 1 | App: camera simulator, Triton + YOLOv8n, detector, event API (docker compose, 3 e2e tests) | ✅ Done |
+| 2 | Containers & Kubernetes: hardened images, Helm charts (70 helm-unittest), NetworkPolicies, Pod Security restricted | ✅ Done |
+| 3 | Terraform (VPC, EKS, ECR, edge EC2, OIDC; 41 `terraform test`) + Ansible edge (Molecule, idempotent on the real host) | ✅ Done, applied |
+| 4 | Argo CD GitOps to edge and EKS (App of Apps, multi-source, SHA-pinned) | ✅ Done, live |
+| 4 | GitHub Actions CI / release / terraform plan | 🟡 Written and actionlint-clean in [`ci/workflows`](ci/workflows); enabling needs a token with the `workflow` scope |
+| 5 | Observability: Alloy → Prometheus (remote_write) + Loki, 7 alerts with promtool tests, dashboards as code | ✅ Done, live (Telegram needs a bot token) |
+| 6 | Security, drills, runbooks, postmortem | 🟡 Runbooks for every alert, [drill plan](docs/drills.md) with 3 drills verified, [first postmortem](docs/postmortems/2026-10-25-first-cloud-deploy.md); remaining drills need alert screenshots |
 
-### Planned failure drills
+### Failure drills
 
-Camera loss · Triton OOMKilled · bad image tag (ImagePullBackOff) · inference latency regression · edge disk pressure · lost edge connectivity · manual drift vs Argo CD self-heal · accidental destroy in `terraform plan`. Each one gets a runbook in [`docs/runbooks/`](docs/runbooks/).
+Camera loss · Triton OOMKilled · bad image tag (ImagePullBackOff) · inference latency regression · edge disk pressure · lost edge connectivity · manual drift vs Argo CD self-heal · accidental destroy in `terraform plan`. Commands, expected alerts and status: [`docs/drills.md`](docs/drills.md); runbooks in [`docs/runbooks/`](docs/runbooks/).
 
 ## Repository layout
 
@@ -144,9 +145,34 @@ as Triton ([ADR-005](docs/adr/005-ovms-for-local-and-ci-inference.md)); the clus
 
 I use **Claude Code** (Claude Max) as a pair engineer, with project skills and MCP tools to scaffold Terraform modules, Helm charts and runbooks. Every change is reviewed by me and validated through `terraform plan`, `helm lint` and CI before it is applied. No secrets or credentials are ever shared with the assistant.
 
+## Running it on AWS
+
+Infrastructure work runs on an SSM-only dev box created once with an admin key
+([`infra/aws/devbox`](infra/aws/devbox/README.md)); the laptop only holds an operator profile that can
+start, stop and send commands to that box. Order of operations, the traps hit on the first
+deploy and the fixes: [`docs/BAO-CAO-DU-AN.md`](docs/BAO-CAO-DU-AN.md) §5–6.
+
+```bash
+bash scripts/devbox.sh 'cd ~/minieyes && bash scripts/lab-power.sh up'      # resume the lab
+bash scripts/devbox.sh 'cd ~/minieyes && bash scripts/lab-power.sh status'
+bash scripts/devbox.sh 'cd ~/minieyes && bash scripts/lab-power.sh down'    # park it overnight
+```
+
+## Teardown
+
+`scripts/teardown.sh --yes` (on the dev box) removes the GitOps roots so Argo CD deletes the
+Traefik LoadBalancer and workloads, deletes the PVCs, runs `terraform destroy` for
+`envs/lab-platform` then `envs/lab`, and finally lists anything still billable (EBS volumes,
+load balancers, Elastic IPs, NAT gateways). `bootstrap` (state bucket, budgets) and the dev box
+are kept on purpose.
+
 ## Cost notes
 
-The lab runs on AWS credits and is torn down with `terraform destroy` when not in use. Budget alarms are set at 30 and 60 USD. Nodes run in public subnets to avoid NAT Gateway cost; this is a lab trade-off, and production would use private subnets behind NAT.
+Measured on the lab (ap-southeast-1, on-demand prices, covered by credits): **running ~0.35 USD/h**
+(EKS control plane 0.10, three Spot t3.medium ~0.05, edge m6i.large 0.12, dev box t3.xlarge 0.21
+while on, NLB/EBS/public IPv4 the rest); **parked ~0.13 USD/h** (nodes at 0, edge and dev box stopped).
+Budget alarms at 30 and 60 USD. Nodes run in public subnets to avoid NAT Gateway cost (ADR-004);
+production would use private subnets behind NAT.
 
 ## License
 
