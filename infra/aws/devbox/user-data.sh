@@ -59,7 +59,8 @@ su - ubuntu -c 'git clone https://github.com/HuanNguyen09/minieyes.git ~/minieye
 cat > /usr/local/sbin/minieyes-idle-stop <<'IDLE'
 #!/usr/bin/env bash
 if who | grep -q . || pgrep -f ssm-session-worker >/dev/null \
-   || pgrep -x claude >/dev/null || pgrep -x terraform >/dev/null \n   || pgrep -f ssm-document-worker >/dev/null; then
+   || pgrep -x claude >/dev/null || pgrep -x terraform >/dev/null \
+   || pgrep -f ssm-document-worker >/dev/null; then
   date +%s > /run/minieyes-last-active; exit 0
 fi
 last=$(cat /run/minieyes-last-active 2>/dev/null || date +%s)
