@@ -27,3 +27,9 @@ variable "state_bucket_name" {
   description = "Terraform state bucket the plan role may read."
   type        = string
 }
+
+variable "create_provider" {
+  description = "Create the GitHub OIDC provider. Set false when the account already has one (it is then only read, never managed)."
+  type        = bool
+  default     = true
+}

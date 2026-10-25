@@ -1,13 +1,24 @@
 # Keyless CI: GitHub Actions exchanges its OIDC token for short-lived AWS credentials.
 # The deployer may create only this OIDC provider (no EKS/IRSA provider; EKS uses Pod Identity).
 resource "aws_iam_openid_connect_provider" "github" {
+  count = var.create_provider ? 1 : 0
+
   url            = "https://token.actions.githubusercontent.com"
   client_id_list = ["sts.amazonaws.com"]
   # thumbprint_list omitted: AWS validates GitHub's certificate against its own trusted CAs.
 }
 
+# An account has at most one provider per URL; when another project already created it, the
+# roles below trust that one and this module never manages (or destroys) it.
+data "aws_iam_openid_connect_provider" "github" {
+  count = var.create_provider ? 0 : 1
+
+  url = "https://token.actions.githubusercontent.com"
+}
+
 locals {
-  oidc_host = "token.actions.githubusercontent.com"
+  oidc_host    = "token.actions.githubusercontent.com"
+  provider_arn = var.create_provider ? aws_iam_openid_connect_provider.github[0].arn : data.aws_iam_openid_connect_provider.github[0].arn
 }
 
 # --- push role: main branch only, ECR push to the project repositories --------------------------
@@ -18,7 +29,7 @@ data "aws_iam_policy_document" "push_trust" {
 
     principals {
       type        = "Federated"
-      identifiers = [aws_iam_openid_connect_provider.github.arn]
+      identifiers = [local.provider_arn]
     }
 
     condition {
@@ -80,7 +91,7 @@ data "aws_iam_policy_document" "plan_trust" {
 
     principals {
       type        = "Federated"
-      identifiers = [aws_iam_openid_connect_provider.github.arn]
+      identifiers = [local.provider_arn]
     }
 
     condition {

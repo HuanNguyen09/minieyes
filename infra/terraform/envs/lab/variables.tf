@@ -93,3 +93,9 @@ variable "site_vpc_cidr" {
   type        = string
   default     = "10.20.0.0/16"
 }
+
+variable "create_github_oidc_provider" {
+  description = "false when the account already has token.actions.githubusercontent.com (another project created it); the lab then reuses it without managing it."
+  type        = bool
+  default     = false
+}

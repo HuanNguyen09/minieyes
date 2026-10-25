@@ -33,12 +33,12 @@ run "github_oidc_provider_exists" {
   command = plan
 
   assert {
-    condition     = aws_iam_openid_connect_provider.github.url == "https://token.actions.githubusercontent.com"
+    condition     = aws_iam_openid_connect_provider.github[0].url == "https://token.actions.githubusercontent.com"
     error_message = "OIDC provider must be token.actions.githubusercontent.com."
   }
 
   assert {
-    condition     = toset(aws_iam_openid_connect_provider.github.client_id_list) == toset(["sts.amazonaws.com"])
+    condition     = toset(aws_iam_openid_connect_provider.github[0].client_id_list) == toset(["sts.amazonaws.com"])
     error_message = "OIDC provider audience must be sts.amazonaws.com."
   }
 }
@@ -170,5 +170,32 @@ run "plan_role_trusts_pull_requests_and_is_read_only" {
   assert {
     condition     = aws_iam_role_policy.plan.role == aws_iam_role.plan.name
     error_message = "The read-only policy must be attached to the plan role."
+  }
+}
+
+# The account may already have GitHub's provider (another project): reuse it, never own it,
+# so destroying the lab cannot delete a provider other workloads depend on.
+run "reuses_an_existing_provider_without_managing_it" {
+  command = plan
+
+  variables {
+    create_provider = false
+  }
+
+  override_data {
+    target = data.aws_iam_openid_connect_provider.github[0]
+    values = {
+      arn = "arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com"
+    }
+  }
+
+  assert {
+    condition     = length(aws_iam_openid_connect_provider.github) == 0
+    error_message = "An existing provider must not be created or managed."
+  }
+
+  assert {
+    condition     = output.oidc_provider_arn == "arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com"
+    error_message = "The roles must trust the existing provider."
   }
 }

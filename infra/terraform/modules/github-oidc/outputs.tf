@@ -10,5 +10,5 @@ output "plan_role_arn" {
 
 output "oidc_provider_arn" {
   description = "ARN of the GitHub Actions OIDC provider."
-  value       = aws_iam_openid_connect_provider.github.arn
+  value       = local.provider_arn
 }

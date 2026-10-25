@@ -81,6 +81,7 @@ module "edge" {
 module "github_oidc" {
   source = "../../modules/github-oidc"
 
+  create_provider          = var.create_github_oidc_provider
   github_repo              = var.github_repo
   ecr_repository_arns      = values(module.ecr.repository_arns)
   state_bucket_name        = local.state_bucket_name
