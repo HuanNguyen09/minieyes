@@ -1,0 +1,273 @@
+// Grafana Alloy at an edge site (ADR-003, FR-PLT-6, #33, #34).
+// Scrapes detector, Triton, node_exporter and kube-state-metrics and
+// remote-writes to the central Prometheus; tails pod logs and pushes them to
+// Loki. Both carry the external label `site`.
+//
+// Environment (set by observability/alloy/values.yaml):
+//   MINIEYES_SITE          site name, e.g. site-01
+//   MINIEYES_BASE_DOMAIN   e.g. 203-0-113-10.sslip.io -> https://metrics.<base_domain>, https://logs.<base_domain>
+//   MINIEYES_PUSH_USER     basic-auth user for metrics. and logs.
+// Files (Kubernetes Secret alloy-push-credentials mounted at /etc/alloy/secrets):
+//   password               basic-auth password
+//
+// Validate: alloy fmt observability/alloy/config.alloy && alloy validate observability/alloy/config.alloy
+
+logging {
+	level  = "info"
+	format = "json"
+}
+
+// ------------------------------------------------------------ discovery
+
+discovery.kubernetes "pods" {
+	role = "pod"
+}
+
+discovery.kubernetes "nodes" {
+	role = "node"
+}
+
+discovery.kubernetes "services" {
+	role = "service"
+}
+
+// Detector: pods labelled app.kubernetes.io/name=detector, container port named "metrics".
+discovery.relabel "detector" {
+	targets = discovery.kubernetes.pods.targets
+
+	rule {
+		source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name", "__meta_kubernetes_pod_container_port_name"]
+		regex         = "detector;metrics"
+		action        = "keep"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_pod_phase"]
+		regex         = "Running"
+		action        = "keep"
+	}
+
+	rule {
+		target_label = "job"
+		replacement  = "detector"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_namespace"]
+		target_label  = "namespace"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_pod_name"]
+		target_label  = "pod"
+	}
+}
+
+// Triton: pods labelled app.kubernetes.io/name=triton, metrics on port 8002 (FR-TRI-3).
+discovery.relabel "triton" {
+	targets = discovery.kubernetes.pods.targets
+
+	rule {
+		source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name", "__meta_kubernetes_pod_container_port_number"]
+		regex         = "triton;8002"
+		action        = "keep"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_pod_phase"]
+		regex         = "Running"
+		action        = "keep"
+	}
+
+	rule {
+		target_label = "job"
+		replacement  = "triton"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_namespace"]
+		target_label  = "namespace"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_pod_name"]
+		target_label  = "pod"
+	}
+}
+
+// node_exporter runs on the host (Ansible role node_exporter) on :9100.
+discovery.relabel "node_exporter" {
+	targets = discovery.kubernetes.nodes.targets
+
+	rule {
+		source_labels = ["__meta_kubernetes_node_address_InternalIP"]
+		regex         = "(.+)"
+		replacement   = "$1:9100"
+		target_label  = "__address__"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_node_name"]
+		target_label  = "instance"
+	}
+
+	rule {
+		target_label = "job"
+		replacement  = "node"
+	}
+}
+
+// kube-state-metrics deployed at the edge (observability/edge/kube-state-metrics-values.yaml).
+discovery.relabel "kube_state_metrics" {
+	targets = discovery.kubernetes.services.targets
+
+	rule {
+		source_labels = ["__meta_kubernetes_service_label_app_kubernetes_io_name", "__meta_kubernetes_service_port_name"]
+		regex         = "kube-state-metrics;http"
+		action        = "keep"
+	}
+
+	rule {
+		target_label = "job"
+		replacement  = "kube-state-metrics"
+	}
+}
+
+// ------------------------------------------------------------ scraping
+
+prometheus.scrape "apps" {
+	targets         = array.concat(discovery.relabel.detector.output, discovery.relabel.triton.output)
+	forward_to      = [prometheus.remote_write.central.receiver]
+	scrape_interval = "15s"
+	job_name        = "apps"
+}
+
+prometheus.scrape "node_exporter" {
+	targets         = discovery.relabel.node_exporter.output
+	forward_to      = [prometheus.remote_write.central.receiver]
+	scrape_interval = "30s"
+	job_name        = "node"
+}
+
+prometheus.scrape "kube_state_metrics" {
+	targets         = discovery.relabel.kube_state_metrics.output
+	forward_to      = [prometheus.remote_write.central.receiver]
+	scrape_interval = "30s"
+	job_name        = "kube-state-metrics"
+	// keep namespace/pod/container from the metrics themselves
+	honor_labels = true
+}
+
+// ------------------------------------------------------------ shipping
+
+prometheus.remote_write "central" {
+	endpoint {
+		url = string.format("https://metrics.%s/api/v1/write", sys.env("MINIEYES_BASE_DOMAIN"))
+
+		basic_auth {
+			username      = sys.env("MINIEYES_PUSH_USER")
+			password_file = "/etc/alloy/secrets/password"
+		}
+	}
+
+	external_labels = {
+		site = sys.env("MINIEYES_SITE"),
+	}
+
+	// The WAL (on the hostPath volume from values.yaml) buffers samples while the
+	// site is offline; samples older than this are dropped.
+	wal {
+		max_keepalive_time = "8h"
+	}
+}
+
+// ------------------------------------------------------------ logs (#34)
+
+// Stream labels stay low-cardinality: site (external), namespace, app, container.
+discovery.relabel "pod_logs" {
+	targets = discovery.kubernetes.pods.targets
+
+	rule {
+		source_labels = ["__meta_kubernetes_pod_container_init"]
+		regex         = "true"
+		action        = "drop"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_namespace"]
+		target_label  = "namespace"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_pod_container_name"]
+		target_label  = "container"
+	}
+
+	// app = app.kubernetes.io/name, else the legacy `app` label
+	rule {
+		source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name"]
+		target_label  = "app"
+	}
+
+	rule {
+		source_labels = ["app", "__meta_kubernetes_pod_label_app"]
+		separator     = ";"
+		regex         = ";(.+)"
+		target_label  = "app"
+	}
+}
+
+// Reads logs through the Kubernetes API: no hostPath on /var/log needed.
+loki.source.kubernetes "pods" {
+	targets    = discovery.relabel.pod_logs.output
+	forward_to = [loki.process.pods.receiver]
+}
+
+loki.process "pods" {
+	forward_to = [loki.write.central.receiver]
+
+	// Detector logs are single-line JSON (apps/detector logs.py): level becomes a
+	// label, camera/zone/event_id structured metadata, so LogQL filters on them
+	// without creating streams: {app="detector"} | camera="cam1"
+	stage.match {
+		selector = "{app=\"detector\"}"
+
+		stage.json {
+			expressions = {
+				level    = "level",
+				camera   = "camera",
+				zone     = "zone",
+				event_id = "event_id",
+			}
+		}
+
+		stage.labels {
+			values = {
+				level = "",
+			}
+		}
+
+		stage.structured_metadata {
+			values = {
+				camera   = "",
+				zone     = "",
+				event_id = "",
+			}
+		}
+	}
+}
+
+loki.write "central" {
+	endpoint {
+		url = string.format("https://logs.%s/loki/api/v1/push", sys.env("MINIEYES_BASE_DOMAIN"))
+
+		basic_auth {
+			username      = sys.env("MINIEYES_PUSH_USER")
+			password_file = "/etc/alloy/secrets/password"
+		}
+	}
+
+	external_labels = {
+		site = sys.env("MINIEYES_SITE"),
+	}
+}

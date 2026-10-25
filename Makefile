@@ -20,7 +20,10 @@ test-tf:
 	@echo "TODO: terraform fmt/validate/test (#21)"
 
 test-rules:
-	@echo "TODO: promtool test rules (#31)"
+	promtool check rules observability/alerts/*.rules.yaml
+	promtool test rules observability/alerts/tests/*.yaml
+	bash observability/alertmanager/test.sh
+	uv run --no-project --with pytest --with pyyaml pytest observability -q
 
 e2e:
 	@echo "TODO: docker compose up + pytest -m e2e (#17)"

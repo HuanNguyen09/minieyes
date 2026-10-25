@@ -1,0 +1,14 @@
+# Edge: renders the ConfigMap that the grafana/alloy release (values.yaml) mounts.
+# The chart's config-reloader picks up changes without a pod restart, so the
+# name is kept stable.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: monitoring
+configMapGenerator:
+  - name: alloy-config
+    files:
+      - config.alloy
+    options:
+      disableNameSuffixHash: true
+      labels:
+        app.kubernetes.io/part-of: minieyes

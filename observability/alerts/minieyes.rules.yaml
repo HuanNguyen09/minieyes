@@ -1,0 +1,99 @@
+# MiniEyes alert rules — the alert contract of PRD §7.3.
+# Evaluated by the central Prometheus (kube-prometheus-stack on EKS) over series
+# remote-written by Grafana Alloy at each edge site. Every edge series carries
+# the external label `site`, so every alert carries `site` too.
+# Tests: observability/alerts/tests/minieyes_test.yaml (promtool test rules).
+groups:
+  - name: minieyes-detector
+    rules:
+      - alert: CameraDown
+        expr: minieyes_camera_up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Camera {{ $labels.camera }} at {{ $labels.site }} is down"
+          description: "minieyes_camera_up has been 0 for more than 1 minute: the detector cannot read the RTSP stream of {{ $labels.camera }}."
+          runbook_url: "https://github.com/HuanNguyen09/minieyes/blob/main/docs/runbooks/camera-down.md"
+
+      - alert: LowFPS
+        expr: |
+          (
+            sum by (site, camera) (rate(minieyes_frames_total[2m])) < 2
+          )
+          and on (site, camera)
+          (
+            max by (site, camera) (minieyes_camera_up) == 1
+          )
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Camera {{ $labels.camera }} at {{ $labels.site }} runs below 2 fps"
+          description: "rate(minieyes_frames_total) has been below 2 frames per second for 5 minutes while the camera is up: inference is too slow or frames are being dropped."
+          runbook_url: "https://github.com/HuanNguyen09/minieyes/blob/main/docs/runbooks/low-fps.md"
+
+      # minieyes_inference_seconds has no camera label (one Triton client per detector).
+      - alert: HighInferenceLatency
+        expr: |
+          histogram_quantile(0.95,
+            sum by (site, le) (rate(minieyes_inference_seconds_bucket[5m]))
+          ) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Inference p95 above 0.5s at {{ $labels.site }}"
+          description: "The 95th percentile of minieyes_inference_seconds has been above 0.5 seconds for 5 minutes. Triton is overloaded, throttled or starved of CPU."
+          runbook_url: "https://github.com/HuanNguyen09/minieyes/blob/main/docs/runbooks/high-inference-latency.md"
+
+  - name: minieyes-platform
+    rules:
+      # kube-state-metrics on EKS is scraped by the central Prometheus directly
+      # and has no `site` label; label_replace names those series site="cloud".
+      - alert: PodCrashLooping
+        expr: |
+          label_replace(
+            increase(kube_pod_container_status_restarts_total[15m]) > 3,
+            "site", "cloud", "site", ""
+          )
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Pod {{ $labels.namespace }}/{{ $labels.pod }} ({{ $labels.container }}) is crash looping at {{ $labels.site }}"
+          description: "Container {{ $labels.container }} restarted more than 3 times in the last 15 minutes. Check the last state reason (OOMKilled, Error) and the previous container logs."
+          runbook_url: "https://github.com/HuanNguyen09/minieyes/blob/main/docs/runbooks/pod-crash-looping.md"
+
+      # 1h trend window so drill 5 (fill the edge disk) is caught within the hour.
+      - alert: DiskWillFillIn24h
+        expr: |
+          predict_linear(
+            node_filesystem_avail_bytes{fstype!~"tmpfs|ramfs|overlay|squashfs|nsfs|fuse.*"}[1h],
+            24 * 3600
+          ) < 0
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Disk {{ $labels.mountpoint }} on {{ $labels.instance }} at {{ $labels.site }} will fill within 24h"
+          description: "At the trend of the last hour, free space on {{ $labels.mountpoint }} ({{ $labels.device }}) reaches zero within 24 hours."
+          runbook_url: "https://github.com/HuanNguyen09/minieyes/blob/main/docs/runbooks/disk-will-fill-in-24h.md"
+
+  - name: minieyes-fleet
+    rules:
+      # A site seen in the last hour that sends nothing now. Remote-written
+      # series stay visible for the 5m lookback, so with `for: 5m` the alert
+      # fires about 10 minutes after the site goes dark (ADR-003).
+      - alert: EdgeSiteSilent
+        expr: |
+          group by (site) (max_over_time(up{site!=""}[1h]))
+          unless
+          group by (site) (up{site!=""})
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Edge site {{ $labels.site }} stopped sending data"
+          description: "{{ $labels.site }} sent metrics within the last hour but has sent nothing for several minutes. The edge node, its network egress or Grafana Alloy is down. Other alerts for this site are inhibited."
+          runbook_url: "https://github.com/HuanNguyen09/minieyes/blob/main/docs/runbooks/edge-site-silent.md"

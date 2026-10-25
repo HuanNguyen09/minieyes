@@ -1,0 +1,21 @@
+# Cloud (EKS) extras that sit next to the kube-prometheus-stack release:
+#   kubectl kustomize observability/
+# Argo CD can point an Application at this directory (see observability/README.md).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: monitoring
+
+resources:
+  - kube-prometheus-stack/prometheusrule-minieyes.yaml
+  - kube-prometheus-stack/servicemonitor-event-api.yaml
+
+secretGenerator:
+  # Referenced by alertmanager.alertmanagerSpec.configSecret. Holds no secret
+  # values: the bot token comes from the separate Secret alertmanager-telegram.
+  - name: alertmanager-minieyes
+    files:
+      - alertmanager.yaml=alertmanager/alertmanager.yaml
+    options:
+      disableNameSuffixHash: true
+      labels:
+        app.kubernetes.io/part-of: minieyes

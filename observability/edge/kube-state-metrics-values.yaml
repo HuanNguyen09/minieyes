@@ -1,0 +1,24 @@
+# Values for prometheus-community/kube-state-metrics at an edge site (#33).
+# Scraped by Alloy (job kube-state-metrics) through the Service port `http`;
+# PodCrashLooping uses kube_pod_container_status_restarts_total.
+fullnameOverride: kube-state-metrics
+service:
+  port: 8080
+selfMonitor:
+  enabled: false
+# Only what the edge dashboards and alerts use, to keep series and CPU low.
+collectors:
+  - deployments
+  - daemonsets
+  - statefulsets
+  - pods
+  - nodes
+  - persistentvolumeclaims
+metricLabelsAllowlist:
+  - pods=[app.kubernetes.io/name]
+resources:
+  requests:
+    cpu: 10m
+    memory: 32Mi
+  limits:
+    memory: 128Mi
