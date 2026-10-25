@@ -43,6 +43,25 @@ mock_provider "aws" {
     }
   }
 
+  mock_resource "aws_eip" {
+    defaults = {
+      public_ip = "198.51.100.7"
+    }
+  }
+
+  mock_resource "aws_instance" {
+    defaults = {
+      id = "i-0123456789abcdef0"
+    }
+  }
+
+  mock_data "aws_ssm_parameter" {
+    defaults = {
+      value          = "ami-0123456789abcdef0"
+      insecure_value = "ami-0123456789abcdef0"
+    }
+  }
+
   mock_data "aws_eks_addon_version" {
     defaults = {
       version = "v1.0.0-eksbuild.1"
@@ -64,7 +83,8 @@ mock_provider "aws" {
 }
 
 variables {
-  admin_cidr = "203.0.113.10/32"
+  admin_cidr          = "203.0.113.10/32"
+  edge_ssh_public_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestKeyOnlyForTests test"
 }
 
 # apply against the mock provider (nothing real is created) so route attributes are known.
@@ -118,5 +138,19 @@ run "eks_in_cloud_vpc_with_deployer_as_admin" {
   assert {
     condition     = contains(output.cluster_admin_arns, "arn:aws:iam::123456789012:role/DevBox-MiniEyes-Claude")
     error_message = "The role running Terraform must be a cluster admin."
+  }
+}
+
+run "edge_in_site_vpc_with_eip_output" {
+  command = apply
+
+  assert {
+    condition     = output.edge_public_ip == "198.51.100.7"
+    error_message = "edge_public_ip must expose the Elastic IP for Ansible and the NLB allow-list."
+  }
+
+  assert {
+    condition     = output.ansible_inventory == "edge ansible_host=198.51.100.7 ansible_user=ubuntu"
+    error_message = "ansible_inventory must point at the edge EIP."
   }
 }

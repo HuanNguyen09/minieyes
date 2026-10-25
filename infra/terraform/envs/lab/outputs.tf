@@ -28,6 +28,21 @@ output "base_domain" {
   value       = var.base_domain
 }
 
+output "edge_public_ip" {
+  description = "Elastic IP of the edge site (Ansible, NLB allow-list in #40)."
+  value       = module.edge.public_ip
+}
+
+output "edge_instance_id" {
+  description = "Edge instance id."
+  value       = module.edge.instance_id
+}
+
+output "ansible_inventory" {
+  description = "One-line inventory entry for infra/ansible."
+  value       = "edge ansible_host=${module.edge.public_ip} ansible_user=ubuntu"
+}
+
 output "ecr_repository_urls" {
   description = "Map of ECR repository name to URL."
   value       = module.ecr.repository_urls

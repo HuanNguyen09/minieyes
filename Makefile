@@ -22,6 +22,7 @@ TF_DIRS := infra/terraform/bootstrap \
 	infra/terraform/modules/ecr \
 	infra/terraform/modules/github-oidc \
 	infra/terraform/modules/eks \
+	infra/terraform/modules/edge-ec2 \
 	infra/terraform/envs/lab \
 	infra/terraform/envs/lab-platform
 

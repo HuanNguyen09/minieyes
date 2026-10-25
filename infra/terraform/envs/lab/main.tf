@@ -66,6 +66,18 @@ module "eks" {
   tags                     = local.tags
 }
 
+module "edge" {
+  source = "../../modules/edge-ec2"
+
+  name                     = "minieyes-edge"
+  vpc_id                   = module.site_vpc.vpc_id
+  subnet_id                = module.site_vpc.public_subnet_ids[0]
+  admin_cidrs              = local.admin_cidrs
+  ssh_public_key           = var.edge_ssh_public_key
+  permissions_boundary_arn = local.permissions_boundary_arn
+  tags                     = local.tags
+}
+
 module "github_oidc" {
   source = "../../modules/github-oidc"
 

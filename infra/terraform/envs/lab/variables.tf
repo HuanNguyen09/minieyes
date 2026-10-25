@@ -36,6 +36,16 @@ variable "extra_cluster_admin_arns" {
   default     = []
 }
 
+variable "edge_ssh_public_key" {
+  description = "OpenSSH public key installed for the ubuntu user on the edge (the dev box key Ansible uses)."
+  type        = string
+
+  validation {
+    condition     = can(regex("^(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp256) ", var.edge_ssh_public_key))
+    error_message = "edge_ssh_public_key must be an OpenSSH public key."
+  }
+}
+
 variable "kubernetes_version" {
   description = "Pinned EKS Kubernetes version; keep it in standard support."
   type        = string
