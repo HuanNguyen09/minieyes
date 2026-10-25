@@ -18,10 +18,10 @@ EDGE=k3d-edge-01
 up() {
   k3d registry list | grep -q "$REGISTRY" || k3d registry create "$REGISTRY" --port "$REG_PORT"
   k3d cluster list | grep -q '^cloud ' || k3d cluster create cloud \
-    --api-port 127.0.0.1:16443 --servers 1 --agents 0 --registry-use "$IN_CLUSTER" \
+    --api-port 127.0.0.1:26443 --servers 1 --agents 0 --registry-use "$IN_CLUSTER" \
     -p "18081:30081@server:0" --k3s-arg "--disable=traefik@server:0" --wait
   k3d cluster list | grep -q '^edge-01 ' || k3d cluster create edge-01 \
-    --api-port 127.0.0.1:16444 --servers 1 --agents 0 --registry-use "$IN_CLUSTER" \
+    --api-port 127.0.0.1:26444 --servers 1 --agents 0 --registry-use "$IN_CLUSTER" \
     --k3s-arg "--disable=traefik@server:0" --wait
 }
 
