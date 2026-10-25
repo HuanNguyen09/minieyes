@@ -1,0 +1,59 @@
+# Terraform plan on pull requests (#30), with the read-only role minieyes-github-plan (trusted
+# only for pull_request). It cannot write the S3 lock file, so plans run with -lock=false.
+#
+# Repository settings: vars.AWS_ACCOUNT_ID, vars.ADMIN_CIDR (dev box EIP /32),
+# vars.EDGE_SSH_PUBLIC_KEY.
+name: terraform-plan
+on:
+  pull_request:
+    paths: [infra/terraform/**]
+
+permissions:
+  contents: read
+  id-token: write
+  pull-requests: write
+
+env:
+  AWS_REGION: ap-southeast-1
+  TF_IN_AUTOMATION: "1"
+  TF_VAR_admin_cidr: ${{ vars.ADMIN_CIDR }}
+  TF_VAR_edge_ssh_public_key: ${{ vars.EDGE_SSH_PUBLIC_KEY }}
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: infra/terraform/envs/lab
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with: { terraform_version: 1.10.5, terraform_wrapper: false }
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/minieyes-github-plan
+          aws-region: ${{ env.AWS_REGION }}
+      - run: terraform init -input=false -backend-config=bucket=minieyes-tfstate-${{ vars.AWS_ACCOUNT_ID }}
+      - name: Plan
+        id: plan
+        run: |
+          terraform plan -input=false -lock=false -no-color -out=plan.tfplan > plan.txt 2>&1 \
+            || { cat plan.txt; exit 1; }
+          terraform show -no-color plan.tfplan > show.txt
+          # destructive changes must be visible at a glance (drill 8)
+          grep -E "must be replaced|will be destroyed" show.txt > destroy.txt || true
+          grep -E "^Plan:|No changes" plan.txt | tail -1 > summary.txt
+      - name: Comment the plan on the pull request
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const dir = 'infra/terraform/envs/lab/';
+            const summary = fs.readFileSync(dir + 'summary.txt', 'utf8');
+            const destroy = fs.readFileSync(dir + 'destroy.txt', 'utf8');
+            const plan = fs.readFileSync(dir + 'show.txt', 'utf8').slice(0, 60000);
+            const warn = destroy ? `\n\n**Destructive changes:**\n\`\`\`\n${destroy}\`\`\`` : '';
+            await github.rest.issues.createComment({
+              ...context.repo, issue_number: context.issue.number,
+              body: `### terraform plan (envs/lab)\n${summary}${warn}\n<details><summary>full plan</summary>\n\n\`\`\`\n${plan}\n\`\`\`\n</details>`,
+            });

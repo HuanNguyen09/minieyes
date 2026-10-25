@@ -1,0 +1,121 @@
+# Pull request checks (#27). Every job runs without AWS credentials.
+name: ci
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  UV_VERSION: "0.12.10"
+  HELM_VERSION: v3.16.2
+  TERRAFORM_VERSION: 1.10.5
+
+jobs:
+  secrets:
+    name: gitleaks
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: Scan the full history
+        run: |
+          curl -fsSL https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz \
+            | tar xz gitleaks
+          ./gitleaks git . --redact --no-banner
+
+  python:
+    name: lint and unit tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with: { version: "${{ env.UV_VERSION }}" }
+      - run: uv sync --all-packages
+      - run: uv run ruff check . && uv run ruff format --check .
+      - run: uv run --package minieyes-detector pytest apps/detector -q
+      - run: uv run --package minieyes-api pytest apps/event-api -q
+      - name: Event API contract tests on Postgres (testcontainers)
+        run: uv run --package minieyes-api pytest apps/event-api -q -m integration
+      - name: IAM policy invariants
+        run: uv run --no-project --with pytest pytest infra/aws/iam -q
+
+  charts:
+    name: helm-unittest, kubeconform, Pod Security, GitOps seed
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+        with: { version: "${{ env.HELM_VERSION }}" }
+      - uses: astral-sh/setup-uv@v6
+        with: { version: "${{ env.UV_VERSION }}" }
+      - name: Install helm-unittest and kubeconform
+        run: |
+          curl -fsSL https://github.com/helm-unittest/helm-unittest/releases/download/v1.1.2/helm-unittest-linux-amd64-1.1.2.tgz \
+            | tar xz -C /tmp && sudo install /tmp/untt-linux-amd64 /usr/local/bin/helm-unittest
+          curl -fsSL https://github.com/yannh/kubeconform/releases/download/v0.8.0/kubeconform-linux-amd64.tar.gz \
+            | sudo tar xz -C /usr/local/bin kubeconform
+      - run: bash scripts/check-charts.sh
+      - run: uv run --no-project --with pytest --with pyyaml pytest tests/policy tests/gitops -q
+
+  terraform:
+    name: terraform fmt, validate, test, tflint, trivy
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with: { terraform_version: "${{ env.TERRAFORM_VERSION }}", terraform_wrapper: false }
+      - uses: terraform-linters/setup-tflint@v4
+        with: { tflint_version: v0.53.0 }
+      - uses: aquasecurity/setup-trivy@v0.2.2
+        with: { version: v0.75.0 }
+      - run: make test-tf
+
+  observability:
+    name: promtool, amtool, dashboards
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with: { version: "${{ env.UV_VERSION }}" }
+      - name: Install promtool and amtool
+        run: |
+          curl -fsSL https://github.com/prometheus/prometheus/releases/download/v2.55.1/prometheus-2.55.1.linux-amd64.tar.gz \
+            | sudo tar xz --strip-components=1 -C /usr/local/bin prometheus-2.55.1.linux-amd64/promtool
+          curl -fsSL https://github.com/prometheus/alertmanager/releases/download/v0.27.0/alertmanager-0.27.0.linux-amd64.tar.gz \
+            | sudo tar xz --strip-components=1 -C /usr/local/bin alertmanager-0.27.0.linux-amd64/amtool
+      - run: make test-rules
+
+  images:
+    name: images, hadolint, trivy, e2e
+    runs-on: ubuntu-24.04
+    needs: [python]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with: { version: "${{ env.UV_VERSION }}" }
+      - name: Install hadolint and trivy
+        run: |
+          sudo curl -fsSL -o /usr/local/bin/hadolint \
+            https://github.com/hadolint/hadolint/releases/download/v2.12.0/hadolint-Linux-x86_64
+          sudo chmod +x /usr/local/bin/hadolint
+          curl -fsSL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
+            | sudo sh -s -- -b /usr/local/bin v0.75.0
+      - name: Export YOLOv8n (not committed)
+        run: |
+          sudo apt-get install -y -qq libgl1
+          uv run --no-project --python 3.12 --with ultralytics==8.3.40 --with torch==2.5.1 \
+            --with torchvision==0.20.1 --with onnx==1.17.0 --with onnxslim==0.1.42 \
+            python triton/scripts/export_model.py
+      - name: Build and start the stack (OVMS stands in for Triton, ADR-005)
+        run: docker compose up -d --build --wait
+      - run: uv run --no-project --with pytest pytest tests/images -m integration -q
+      - run: uv run --no-project --with pytest --with httpx pytest tests/e2e -m e2e -q
+      - if: failure()
+        run: docker compose logs --tail 100

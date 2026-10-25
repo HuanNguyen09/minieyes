@@ -1,0 +1,82 @@
+# Release on main (#28): build the four images tagged with the full commit SHA, push them to ECR
+# through OIDC (role minieyes-github-push, trusted only for refs/heads/main), then commit that
+# SHA to the GitOps repo as both the chart revision and the image tag. Argo CD does the rest.
+#
+# Repository settings:
+#   vars.AWS_ACCOUNT_ID       370267611220
+#   secrets.GITOPS_DEPLOY_KEY write deploy key of HuanNguyen09/minieyes-gitops (that repo only)
+name: release
+on:
+  push:
+    branches: [main]
+    paths: [apps/**, charts/**, camera-sim/**, triton/**, uv.lock]
+
+permissions:
+  contents: read
+  id-token: write   # OIDC token for AWS
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ap-southeast-1
+  REGISTRY: ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.ap-southeast-1.amazonaws.com
+
+jobs:
+  images:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/minieyes-github-push
+          aws-region: ${{ env.AWS_REGION }}
+      - uses: aws-actions/amazon-ecr-login@v2
+      - name: Export YOLOv8n for the model image
+        run: |
+          sudo apt-get install -y -qq libgl1
+          pipx run uv==0.12.10 run --no-project --python 3.12 --with ultralytics==8.3.40 \
+            --with torch==2.5.1 --with torchvision==0.20.1 --with onnx==1.17.0 --with onnxslim==0.1.42 \
+            python triton/scripts/export_model.py
+      - name: Build and push (tags are immutable; existing tags are skipped)
+        run: |
+          set -euo pipefail
+          build() {  # repo dockerfile context
+            if aws ecr describe-images --repository-name "minieyes/$1" \
+                 --image-ids imageTag="$GITHUB_SHA" >/dev/null 2>&1; then
+              echo "minieyes/$1:$GITHUB_SHA exists, skipping"; return
+            fi
+            docker build -f "$2" -t "$REGISTRY/minieyes/$1:$GITHUB_SHA" "$3"
+            docker push "$REGISTRY/minieyes/$1:$GITHUB_SHA"
+          }
+          build detector apps/detector/Dockerfile .
+          build event-api apps/event-api/Dockerfile .
+          build camera-sim camera-sim/Dockerfile camera-sim
+          build model-yolov8n triton/Dockerfile.model triton
+
+  gitops:
+    needs: images
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: HuanNguyen09/minieyes-gitops
+          ssh-key: ${{ secrets.GITOPS_DEPLOY_KEY }}
+      - name: Point chart revisions and image tags at this commit
+        run: |
+          set -euo pipefail
+          for app in clusters/*/apps/event-api.yaml sites/*/apps/{detector,triton,camera-sim}.yaml; do
+            yq -i '(.spec.sources[] | select(.path != null and (.path | test("^charts/")))).targetRevision = strenv(GITHUB_SHA)' "$app"
+          done
+          for values in clusters/*/values/event-api.yaml sites/*/values/{detector,camera-sim}.yaml; do
+            yq -i '.image.tag = strenv(GITHUB_SHA)' "$values"
+          done
+          for values in sites/*/values/triton.yaml; do
+            yq -i '.model.image |= sub(":[0-9a-f]{40}$"; ":" + strenv(GITHUB_SHA))' "$values"
+          done
+          git config user.name "minieyes-release"
+          git config user.email "release@minieyes.invalid"
+          git commit -am "release minieyes@${GITHUB_SHA::7}" \
+            || { echo "nothing to change"; exit 0; }
+          git push
