@@ -233,11 +233,21 @@ make test test-helm test-tf test-rules test-ansible && make e2e
 
 ## 8. Việc còn lại
 
+Đã làm thêm sau khi tắt lab (không cần cluster): dashboard Grafana (#35, đóng), alert mới
+`DetectorDown` (phát hiện khi soạn diễn tập: detector không khởi động được thì `CameraDown`
+không bao giờ bắn), [kế hoạch diễn tập](drills.md), [postmortem đầu tiên](postmortems/2026-10-25-first-cloud-deploy.md),
+ADR-006 + `scripts/rotate-secret.sh`, gitleaks quét sạch lịch sử 2 repo, `scripts/teardown.sh`,
+README cuối, 3 workflow CI (actionlint sạch).
+
 | Issue | Còn thiếu | Cần gì |
 |---|---|---|
-| #27, #28, #30 CI | Workflow GitHub Actions chưa push | Token GitHub cần scope `workflow`: `gh auth refresh -h github.com -s workflow -u HuanNguyen09` |
-| #35 Dashboards | Chưa có JSON dashboard | Có thể làm tiếp |
-| #38 Failure drills | Chưa diễn tập (tắt camera, tắt API, xoá pod…) | Có runbook cho từng alert |
-| #39 Demo, README cuối | Chưa quay video | — |
-| Telegram | `/minieyes/cloud/telegram-bot-token` đang là giá trị ngẫu nhiên | Tạo bot với BotFather, ghi token vào SSM, chạy lại `bootstrap-secrets.sh cloud`, sửa `chat_id` |
-| Repo GitOps CI | `ci/validate.yaml` chưa chuyển vào `.github/workflows` | Cùng lý do scope `workflow` |
+| #27, #28, #30 CI | Workflow nằm ở `ci/workflows/` và nhánh local `ci/workflows`, chưa ở `.github/workflows` | **Bạn** chạy `gh auth refresh -h github.com -s workflow -u HuanNguyen09`, rồi làm theo `ci/workflows/README.md`; thêm variable `AWS_ACCOUNT_ID`, secret `GITOPS_DEPLOY_KEY` |
+| #36 Secrets | Chạy thử `rotate-secret.sh site-api-key` trên lab đang bật | Lab bật (sáng mai) |
+| #38 Drills | 5/8 bài cần lab bật + ảnh chụp alert | Lab bật; Telegram để thấy alert trên điện thoại |
+| #39 Demo | Video ≤ 3 phút | **Bạn** quay (intrusion → Telegram, release qua Git, rollback bằng revert) |
+| #20 k3d | Lab 2 cluster k3d chưa chạy trọn vẹn (máy laptop yếu) | Chạy `scripts/k3d.sh` trên dev box |
+| #2 Guardrails | Telegram bot | **Bạn** tạo bot (BotFather), mình ghi token vào SSM `/minieyes/cloud/telegram-bot-token` và `chat_id` vào repo GitOps |
+| Dọn dẹp | Root access key | **Bạn** xoá trong console (Security credentials) |
+
+Gợi ý thứ tự sáng mai: `lab-power.sh up` → kiểm tra `status` → chạy `rotate-secret.sh site-api-key`
+→ các diễn tập 1, 3, 7 (nhanh, thấy ngay trong Grafana) → `lab-power.sh down`.
