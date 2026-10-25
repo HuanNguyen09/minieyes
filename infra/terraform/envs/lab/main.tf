@@ -63,6 +63,7 @@ module "eks" {
   admin_principal_arns     = local.cluster_admin_arns
   permissions_boundary_arn = local.permissions_boundary_arn
   node_instance_types      = var.node_instance_types
+  node_desired_size        = var.node_desired_size
   tags                     = local.tags
 }
 

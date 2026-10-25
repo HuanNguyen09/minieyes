@@ -47,7 +47,7 @@ variable "permissions_boundary_arn" {
 variable "node_instance_types" {
   description = "Spot instance types for the node group; only types allowed by the deployer guardrails."
   type        = list(string)
-  default     = ["t3.medium", "m6i.large", "t3.small"]
+  default     = ["t3.medium", "m6i.large"]
 
   validation {
     condition = alltrue([

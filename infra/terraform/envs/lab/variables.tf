@@ -53,9 +53,9 @@ variable "kubernetes_version" {
 }
 
 variable "node_instance_types" {
-  description = "Spot instance types for the EKS node group (deployer allows only m6i.large and t3.micro/small/medium)."
+  description = "Spot instance types for the EKS node group (deployer allows only m6i.large and t3.micro/small/medium). t3.small is left out: with the VPC CNI it fits only 11 pods and ~1.4 GiB, too small for the platform pods."
   type        = list(string)
-  default     = ["t3.medium", "m6i.large", "t3.small"]
+  default     = ["t3.medium", "m6i.large"]
 }
 
 variable "base_domain" {
@@ -98,4 +98,10 @@ variable "create_github_oidc_provider" {
   description = "false when the account already has token.actions.githubusercontent.com (another project created it); the lab then reuses it without managing it."
   type        = bool
   default     = false
+}
+
+variable "node_desired_size" {
+  description = "Spot nodes in the EKS node group. Three t3.medium-class nodes fit Argo CD, monitoring, Loki and the API."
+  type        = number
+  default     = 3
 }
