@@ -1,0 +1,61 @@
+# Values for grafana/alloy at an edge site (ADR-003, #33/#34).
+# The config itself is observability/alloy/config.alloy, shipped as the
+# ConfigMap `alloy-config` by observability/alloy/kustomization.yaml.
+# Per-site values (MINIEYES_SITE, MINIEYES_BASE_DOMAIN) are overridden in the
+# GitOps repo under sites/<site>/.
+
+alloy:
+  configMap:
+    create: false
+    name: alloy-config
+    key: config.alloy
+  # WAL and positions survive pod restarts (hostPath below).
+  storagePath: /var/lib/alloy
+  extraEnv:
+    - name: MINIEYES_SITE
+      value: site-01
+    - name: MINIEYES_BASE_DOMAIN
+      value: CHANGE-ME.sslip.io # PLACEHOLDER: var.base_domain from Terraform
+    - name: MINIEYES_PUSH_USER
+      valueFrom:
+        secretKeyRef:
+          name: alloy-push-credentials
+          key: username
+  mounts:
+    # Logs are read through the Kubernetes API (loki.source.kubernetes), not /var/log.
+    varlog: false
+    extra:
+      - name: push-credentials
+        mountPath: /etc/alloy/secrets
+        readOnly: true
+      - name: alloy-data
+        mountPath: /var/lib/alloy
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      memory: 384Mi
+
+controller:
+  # Single-node k3s edge: one Alloy per node.
+  type: daemonset
+  volumes:
+    extra:
+      # Secret alloy-push-credentials (keys: username, password) is created
+      # outside Git (External Secrets / Sealed Secrets, FR-PLT-7).
+      - name: push-credentials
+        secret:
+          secretName: alloy-push-credentials
+          items:
+            - key: password
+              path: password
+      - name: alloy-data
+        hostPath:
+          path: /var/lib/alloy
+          type: DirectoryOrCreate
+
+# The chart's ClusterRole already grants read on pods, pods/log, nodes,
+# services and endpoints, which discovery.kubernetes and loki.source.kubernetes need.
+rbac:
+  create: true

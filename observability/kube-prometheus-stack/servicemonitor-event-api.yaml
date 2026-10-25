@@ -1,0 +1,20 @@
+# Scrapes the Event API on EKS (FR-API-3 GET /metrics). Assumes the event-api
+# chart (#19) labels its Service app.kubernetes.io/name=event-api and names the
+# HTTP port `http`.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: event-api
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/part-of: minieyes
+spec:
+  namespaceSelector:
+    any: true
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: event-api
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s

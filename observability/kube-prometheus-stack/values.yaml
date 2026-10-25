@@ -1,0 +1,130 @@
+# Values for prometheus-community/kube-prometheus-stack on EKS (FR-PLT-6, #33).
+# Consumed by the Argo CD Application in the GitOps repo; see observability/README.md.
+# Pair with observability/kustomization.yaml (PrometheusRule, Alertmanager config
+# Secret, dashboard ConfigMaps, event-api ServiceMonitor).
+
+crds:
+  enabled: true
+
+# EKS hides the control plane: drop scrapes and rules that can never succeed.
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeEtcd:
+  enabled: false
+kubeProxy:
+  enabled: false
+defaultRules:
+  create: true
+  rules:
+    etcd: false
+    kubeControllerManager: false
+    kubeSchedulerAlerting: false
+    kubeSchedulerRecording: false
+    kubeProxy: false
+
+prometheus:
+  prometheusSpec:
+    # Edge Grafana Alloy agents push here (ADR-003). Exposed as
+    # https://metrics.<base_domain>/api/v1/write by the ingress from #40
+    # (TLS + basic auth; only that path should be routed).
+    enableRemoteWriteReceiver: true
+    # Alerts from cloud-only series get site="cloud"; edge series already carry their site.
+    externalLabels:
+      site: cloud
+    retention: 15d
+    retentionSize: 18GB
+    # Pick up every PrometheusRule / ServiceMonitor / PodMonitor, not only the
+    # ones labelled with this release.
+    ruleSelectorNilUsesHelmValues: false
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    resources:
+      requests:
+        cpu: 200m
+        memory: 1Gi
+      limits:
+        memory: 2Gi
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: gp3
+          accessModes: [ReadWriteOnce]
+          resources:
+            requests:
+              storage: 20Gi
+
+alertmanager:
+  alertmanagerSpec:
+    # Secret built from observability/alertmanager/alertmanager.yaml by
+    # observability/kustomization.yaml (key alertmanager.yaml). When set, the
+    # chart's alertmanager.config is ignored.
+    configSecret: alertmanager-minieyes
+    # Mounted at /etc/alertmanager/secrets/alertmanager-telegram/; key `bot-token`
+    # is created outside Git (External Secrets / Sealed Secrets, FR-PLT-7).
+    secrets:
+      - alertmanager-telegram
+    resources:
+      requests:
+        cpu: 20m
+        memory: 64Mi
+      limits:
+        memory: 128Mi
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: gp3
+          accessModes: [ReadWriteOnce]
+          resources:
+            requests:
+              storage: 2Gi
+
+grafana:
+  # Admin credentials from a Secret created outside Git.
+  admin:
+    existingSecret: grafana-admin
+    userKey: admin-user
+    passwordKey: admin-password
+  sidecar:
+    dashboards:
+      enabled: true
+      # ConfigMaps from observability/kustomization.yaml carry this label.
+      label: grafana_dashboard
+      labelValue: "1"
+      searchNamespace: ALL
+      folderAnnotation: grafana_folder
+      provider:
+        foldersFromFilesStructure: true
+    datasources:
+      enabled: true
+  additionalDataSources:
+    - name: Loki
+      uid: loki
+      type: loki
+      access: proxy
+      url: http://loki.monitoring.svc.cluster.local:3100
+      jsonData:
+        maxLines: 1000
+  persistence:
+    enabled: false
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      memory: 256Mi
+
+prometheusOperator:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      memory: 256Mi
+
+# Cloud-side exporters; edge exporters are scraped by Alloy.
+nodeExporter:
+  enabled: true
+kubeStateMetrics:
+  enabled: true
