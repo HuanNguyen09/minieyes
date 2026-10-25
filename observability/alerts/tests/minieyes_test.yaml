@@ -217,3 +217,28 @@ tests:
       - eval_time: 100m
         alertname: EdgeSiteSilent
         exp_alerts: []
+
+  # -------------------------------------------------------------- DetectorDown
+  # A detector that cannot start (bad image tag, crash) exposes no minieyes_* series at all, so
+  # CameraDown (== 0) cannot fire; the scrape target going down is the signal.
+  - name: DetectorDown fires when the detector target is down for 2m, not when it is up
+    interval: 1m
+    input_series:
+      - series: 'up{site="site-01", job="detector", instance="10.42.0.7:8080"}'
+        values: '1 1 0 0 0 0 0'          # down from t=2m
+      - series: 'up{site="site-02", job="detector", instance="10.42.0.9:8080"}'
+        values: '1x6'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: DetectorDown
+        exp_alerts: []                   # down for 1m: pending only
+      - eval_time: 4m15s
+        alertname: DetectorDown
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              site: site-01
+            exp_annotations:
+              summary: "Detector at site-01 is down"
+              description: "The detector at site-01 has not been scraped for 2 minutes: no camera is being watched there."
+              runbook_url: "https://github.com/HuanNguyen09/minieyes/blob/main/docs/runbooks/detector-down.md"

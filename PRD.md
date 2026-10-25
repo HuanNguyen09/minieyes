@@ -135,6 +135,7 @@ Pure domain modules (`zones`, `postprocess`, `debounce`, `backoff`) have no I/O 
 | Alert | Condition (summary) | For |
 |---|---|---|
 | `CameraDown` | `minieyes_camera_up == 0` | 1m |
+| `DetectorDown` | detector scrape target down (`up{job="detector"} == 0`): a detector that cannot start exposes no `minieyes_*` series | 2m |
 | `LowFPS` | frame rate < 2 fps while camera up | 5m |
 | `HighInferenceLatency` | p95 `minieyes_inference_seconds` > 0.5 s | 5m |
 | `PodCrashLooping` | restarts increase > 3 in 15m | 0m |

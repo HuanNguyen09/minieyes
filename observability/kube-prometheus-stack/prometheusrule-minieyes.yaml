@@ -21,6 +21,15 @@ spec:
         summary: Camera {{ $labels.camera }} at {{ $labels.site }} is down
         description: 'minieyes_camera_up has been 0 for more than 1 minute: the detector cannot read the RTSP stream of {{ $labels.camera }}.'
         runbook_url: https://github.com/HuanNguyen09/minieyes/blob/main/docs/runbooks/camera-down.md
+    - alert: DetectorDown
+      expr: max by (site) (up{job="detector"}) == 0
+      for: 2m
+      labels:
+        severity: critical
+      annotations:
+        summary: Detector at {{ $labels.site }} is down
+        description: 'The detector at {{ $labels.site }} has not been scraped for 2 minutes: no camera is being watched there.'
+        runbook_url: https://github.com/HuanNguyen09/minieyes/blob/main/docs/runbooks/detector-down.md
     - alert: LowFPS
       expr: |
         (
