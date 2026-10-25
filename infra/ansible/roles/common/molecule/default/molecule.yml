@@ -21,6 +21,9 @@ platforms:
       - /tmp
 provisioner:
   name: ansible
+  env:
+    # converge.yml uses the role by name; make the sibling roles/ directory visible
+    ANSIBLE_ROLES_PATH: ${MOLECULE_PROJECT_DIRECTORY}/..
   inventory:
     host_vars:
       common-ubuntu2404:
