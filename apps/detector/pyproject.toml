@@ -8,6 +8,7 @@ dependencies = [
     "opencv-python-headless>=4.10",
     "prometheus-client>=0.20",
     "pyyaml>=6.0",
+    "tritonclient[grpc]>=2.50",
 ]
 
 [build-system]
