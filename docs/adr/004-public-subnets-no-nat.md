@@ -34,3 +34,27 @@ HTTPS (NFR-4), and the cloud VPC hosts a small lab cluster.
   need a log group outside the deployer's `/aws/eks/minieyes-*` scope).
 - Moving to private nodes later is additive: add private subnets and a NAT Gateway (or ECR/S3/STS
   endpoints) and point the node group at them.
+
+## Related EKS decisions
+
+- **Plain `aws_eks_*` resources instead of `terraform-aws-modules/eks`.** The module creates an IRSA
+  OIDC provider, a KMS key and a CloudWatch log group by default; the deployer guardrails deny the
+  first (only the GitHub OIDC provider may exist) and the others cost money. Its internals also
+  cannot be asserted from `terraform test`. The plain version is ~200 lines and fully tested.
+- **EKS Pod Identity, not IRSA**, for the EBS CSI controller (`minieyes-lab-ebs-csi`, trusted by
+  `pods.eks.amazonaws.com`). vpc-cni keeps using the node role.
+- **Endpoint:** public access limited to the admin CIDRs, private access on, so nodes (whose public
+  IPs are not in the admin list) talk to the API through the VPC.
+- **Spot instance types:** the guardrails only allow `m6i.large` and `t3.micro|small|medium`, so the
+  node group lists `t3.medium`, `m6i.large`, `t3.small`. `t3.small` (2 GiB) is the weakest pool
+  and is kept only to have three Spot pools; drop it if pods stop fitting.
+- **Add-ons:** vpc-cni, kube-proxy and eks-pod-identity-agent are created before the node group
+  (nodes need the CNI to become Ready), coredns and aws-ebs-csi-driver after it.
+  `bootstrap_self_managed_addons = false`.
+- **Argo CD and the gp3 StorageClass** live in `envs/lab-platform` (separate state, Helm and
+  Kubernetes providers authenticated with `aws_eks_cluster_auth`), because those providers cannot
+  be configured before the cluster exists.
+- **No secrets envelope KMS key and no control-plane logs:** EKS encrypts secrets with an AWS-owned
+  key by default, and log ingestion is not needed for the lab.
+- **`upgrade_policy.support_type = STANDARD`:** EKS refuses to run the cluster in extended
+  support (6x the hourly price) instead of billing it silently.

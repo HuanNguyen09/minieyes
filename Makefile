@@ -21,7 +21,9 @@ TF_DIRS := infra/terraform/bootstrap \
 	infra/terraform/modules/vpc \
 	infra/terraform/modules/ecr \
 	infra/terraform/modules/github-oidc \
-	infra/terraform/envs/lab
+	infra/terraform/modules/eks \
+	infra/terraform/envs/lab \
+	infra/terraform/envs/lab-platform
 
 test-tf:
 	terraform fmt -check -recursive infra/terraform

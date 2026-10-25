@@ -18,12 +18,53 @@ mock_provider "aws" {
     }
   }
 
+  # apply runs feed generated ARNs into arguments the provider validates.
+  mock_resource "aws_iam_role" {
+    defaults = {
+      arn = "arn:aws:iam::123456789012:role/minieyes-mock"
+    }
+  }
+
+  mock_resource "aws_iam_openid_connect_provider" {
+    defaults = {
+      arn = "arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com"
+    }
+  }
+
+  mock_resource "aws_ecr_repository" {
+    defaults = {
+      arn = "arn:aws:ecr:ap-southeast-1:123456789012:repository/minieyes-mock"
+    }
+  }
+
+  mock_resource "aws_launch_template" {
+    defaults = {
+      id = "lt-0123456789abcdef0"
+    }
+  }
+
+  mock_data "aws_eks_addon_version" {
+    defaults = {
+      version = "v1.0.0-eksbuild.1"
+    }
+  }
+
+  mock_data "aws_iam_session_context" {
+    defaults = {
+      issuer_arn = "arn:aws:iam::123456789012:role/DevBox-MiniEyes-Claude"
+    }
+  }
+
   # Policy documents feed role/policy arguments; give the mock valid JSON.
   mock_data "aws_iam_policy_document" {
     defaults = {
       json = "{\"Version\":\"2012-10-17\",\"Statement\":[]}"
     }
   }
+}
+
+variables {
+  admin_cidr = "203.0.113.10/32"
 }
 
 # apply against the mock provider (nothing real is created) so route attributes are known.
@@ -62,5 +103,20 @@ run "registry_and_ci_roles" {
   assert {
     condition     = output.account_id == "123456789012"
     error_message = "account_id output is needed by the GitOps seed."
+  }
+}
+
+run "eks_in_cloud_vpc_with_deployer_as_admin" {
+  command = plan
+
+  assert {
+    condition     = output.cluster_name == "minieyes-lab"
+    error_message = "Cluster must be named minieyes-lab."
+  }
+
+  # The deployer runs on an instance role: the access entry needs the role ARN, not the STS session ARN.
+  assert {
+    condition     = contains(output.cluster_admin_arns, "arn:aws:iam::123456789012:role/DevBox-MiniEyes-Claude")
+    error_message = "The role running Terraform must be a cluster admin."
   }
 }
