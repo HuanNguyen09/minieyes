@@ -50,9 +50,29 @@ if [ -z "$(aws configure get aws_access_key_id --profile minieyes-operator 2>/de
   echo "operator key stored in profile minieyes-operator"
 fi
 
+echo "== dedicated dev-box network (public subnet, no NAT; nothing else of the account is touched)"
+tag() { echo "ResourceType=$1,Tags=[{Key=Name,Value=minieyes-devbox}]"; }
+vpc=$(aws ec2 describe-vpcs --filters Name=tag:Name,Values=minieyes-devbox --query 'Vpcs[0].VpcId' --output text)
+if [ "$vpc" = "None" ]; then
+  vpc=$(aws ec2 create-vpc --cidr-block 10.250.0.0/24 --tag-specifications "$(tag vpc)" \
+          --query Vpc.VpcId --output text)
+  aws ec2 wait vpc-available --vpc-ids "$vpc"
+  aws ec2 modify-vpc-attribute --vpc-id "$vpc" --enable-dns-hostnames
+  igw=$(aws ec2 create-internet-gateway --tag-specifications "$(tag internet-gateway)" \
+          --query InternetGateway.InternetGatewayId --output text)
+  aws ec2 attach-internet-gateway --vpc-id "$vpc" --internet-gateway-id "$igw"
+  subnet=$(aws ec2 create-subnet --vpc-id "$vpc" --cidr-block 10.250.0.0/26 \
+             --availability-zone ap-southeast-1a --tag-specifications "$(tag subnet)" \
+             --query Subnet.SubnetId --output text)
+  aws ec2 modify-subnet-attribute --subnet-id "$subnet" --map-public-ip-on-launch
+  rt=$(aws ec2 create-route-table --vpc-id "$vpc" --tag-specifications "$(tag route-table)" \
+         --query RouteTable.RouteTableId --output text)
+  aws ec2 create-route --route-table-id "$rt" --destination-cidr-block 0.0.0.0/0 --gateway-id "$igw" >/dev/null
+  aws ec2 associate-route-table --route-table-id "$rt" --subnet-id "$subnet" >/dev/null
+fi
+subnet=$(aws ec2 describe-subnets --filters Name=vpc-id,Values="$vpc" --query 'Subnets[0].SubnetId' --output text)
+
 echo "== security group without inbound rules"
-vpc=$(aws ec2 describe-vpcs --filters Name=is-default,Values=true --query 'Vpcs[0].VpcId' --output text)
-[ "$vpc" != "None" ] || { echo "no default VPC in ap-southeast-1" >&2; exit 1; }
 sg=$(aws ec2 describe-security-groups --filters Name=vpc-id,Values="$vpc" Name=group-name,Values=minieyes-devbox \
        --query 'SecurityGroups[0].GroupId' --output text)
 if [ "$sg" = "None" ]; then
@@ -70,15 +90,16 @@ if [ "$instance" = "None" ]; then
     --query Parameter.Value --output text)
   for attempt in 1 2 3 4 5 6; do  # a new instance profile takes a few seconds to propagate
     instance=$(aws ec2 run-instances --image-id "$ami" --instance-type "$INSTANCE_TYPE" \
-      --iam-instance-profile Name="$PROFILE_ROLE" --security-group-ids "$sg" \
+      --iam-instance-profile Name="$PROFILE_ROLE" --security-group-ids "$sg" --subnet-id "$subnet" \
       --metadata-options HttpTokens=required,HttpPutResponseHopLimit=1,HttpEndpoint=enabled \
       --block-device-mappings 'DeviceName=/dev/sda1,Ebs={VolumeSize=100,VolumeType=gp3,Encrypted=true,DeleteOnTermination=true}' \
       --user-data file://user-data.sh \
       --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=minieyes-devbox},{Key=minieyes:role,Value=devbox}]' \
                            'ResourceType=volume,Tags=[{Key=Name,Value=minieyes-devbox}]' \
-      --query 'Instances[0].InstanceId' --output text 2>/dev/null) && break
-    echo "instance profile not visible yet, retrying ($attempt)"; sleep 10
+      --query 'Instances[0].InstanceId' --output text) && break
+    echo "launch failed (often a new instance profile not visible yet), retrying ($attempt)"; sleep 10
   done
+  [ -n "$instance" ] && [ "$instance" != "None" ] || { echo "could not launch the dev box" >&2; exit 1; }
 fi
 aws ec2 wait instance-running --instance-ids "$instance"
 echo "dev box $instance running; tools install takes ~5 min (/var/log/minieyes-devbox.log)"
