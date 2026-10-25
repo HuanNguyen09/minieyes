@@ -7,7 +7,7 @@ export DEBIAN_FRONTEND=noninteractive
 
 apt-get update
 apt-get install -y --no-install-recommends \
-  ca-certificates curl git jq make unzip zip gnupg python3 python3-venv \
+  ca-certificates curl git jq make unzip zip gnupg python3 python3-venv libgl1 libglib2.0-0t64 \
   docker.io docker-compose-v2 docker-buildx
 usermod -aG docker ubuntu
 systemctl enable --now docker

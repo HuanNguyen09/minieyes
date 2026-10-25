@@ -8,6 +8,7 @@ They stop and start containers, so do not run them against a stack you are using
 
 import subprocess
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
@@ -50,10 +51,19 @@ def metric(name: str, **labels: str) -> float:
     return total
 
 
-def stored_events() -> int:
+def detector_started_at() -> str:
+    """Start of the running detector process, as the API's `from` filter (UTC, whole seconds).
+
+    Its counters restart from zero with the process while Postgres keeps older events, so only
+    events raised since this moment can be compared with them."""
+    started = int(metric("process_start_time_seconds"))
+    return datetime.fromtimestamp(started, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def stored_events(since: str) -> int:
     count, cursor = 0, None
     while True:
-        params = {"limit": 500} | ({"cursor": cursor} if cursor else {})
+        params = {"limit": 500, "from": since} | ({"cursor": cursor} if cursor else {})
         page = httpx.get(f"{API}/events", params=params, headers=KEY, timeout=5).json()
         count += len(page["items"])
         cursor = page["next"]
@@ -96,9 +106,11 @@ def test_no_event_is_lost_while_the_event_api_is_down_for_30_seconds():
     # freeze the input so the totals stop moving, then let the buffer drain
     compose("stop", "camera-sim")
 
+    since = detector_started_at()
+
     def delivered_everything():
         expected = metric("minieyes_events_total") - metric("minieyes_events_dropped_total")
-        return stored_events() == expected
+        return stored_events(since) == expected
 
     assert raised_during_outage > 0
     assert wait_for(delivered_everything, 90, interval=3)
