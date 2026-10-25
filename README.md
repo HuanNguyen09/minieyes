@@ -80,7 +80,7 @@ CI never talks to a cluster. It pushes images to ECR and commits the new tag to 
 | 4 | Argo CD GitOps to edge and EKS (App of Apps, multi-source, SHA-pinned) | ✅ Done, live |
 | 4 | GitHub Actions CI / release / terraform plan | 🟡 Written and actionlint-clean in [`ci/workflows`](ci/workflows); enabling needs a token with the `workflow` scope |
 | 5 | Observability: Alloy → Prometheus (remote_write) + Loki, 7 alerts with promtool tests, dashboards as code | ✅ Done, live (Telegram needs a bot token) |
-| 6 | Security, drills, runbooks, postmortem | 🟡 Runbooks for every alert, [drill plan](docs/drills.md) with 3 drills verified, [first postmortem](docs/postmortems/2026-10-25-first-cloud-deploy.md); remaining drills need alert screenshots |
+| 6 | Security, drills, runbooks, postmortems | ✅ All 8 [drills](docs/drills.md) run on the live lab (alert times recorded), 2 [postmortems](docs/postmortems/), secret rotation verified; drills found and fixed 4 real issues |
 
 ### Failure drills
 

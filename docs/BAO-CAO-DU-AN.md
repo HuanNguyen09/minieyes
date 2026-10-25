@@ -174,6 +174,10 @@ Xem Grafana / Argo CD từ dev box:
 | NetworkPolicy "có" nhưng không chặn gì trên EKS | Add-on `vpc-cni` chưa bật network policy agent | `enableNetworkPolicy=true`; đã thử: pod debug → Postgres bị **BLOCKED** |
 | Ansible lần 2 vẫn `changed=2` | Secret dùng `stringData` ⇒ `kubectl apply` luôn báo `configured` | Dùng `data` (base64); lần chạy lại `changed=0` |
 | Argo vẫn báo lỗi cũ sau khi đã sửa | Kết quả render bị cache | `argocd.argoproj.io/refresh=hard` |
+| (diễn tập 2) Nâng cấp Triton treo mãi | Edge 1 node 2 vCPU: pod mới (1 CPU) không xếp được cạnh pod cũ | Chart Triton `maxSurge 0 / maxUnavailable 1` |
+| (diễn tập 3) Detector chết mà không có alert | Pod không khởi động ⇒ metric `camera_up` biến mất ⇒ `CameraDown` (== 0) không bắn | Alert mới `DetectorDown`, có nhánh bắt cả khi target biến mất |
+| (diễn tập 5) Node edge DiskPressure, pod bị evict hàng loạt | Ổ 40 GB: image Triton 15 GB bị dọn rồi kéo lại làm đầy ổ; alert 24h quá chậm | Ổ 80 GB (resize online) + alert nhanh `DiskAlmostFull` |
+| (diễn tập 6) Chặn mạng mà pod vẫn ra internet | `iptables OUTPUT` chỉ chặn tiến trình của host; pod đi qua `FORWARD` | Chặn cả `FORWARD`; ghi vào runbook |
 | `sshd -t` lỗi trong Molecule | Ubuntu 24.04 khởi động sshd bằng socket ⇒ `/run/sshd` chưa có | Role tạo thư mục trước khi kiểm tra |
 | cloud-init dev box dừng giữa chừng | Bản trivy v0.56.2 không còn file tải; tên binary helm-unittest khác | Pin trivy v0.75.0, sửa tên |
 | Script `.sh` hỏng trên Linux | File viết trên Windows có CRLF | `.gitattributes eol=lf`; luôn kiểm `file x.sh` |
@@ -233,21 +237,13 @@ make test test-helm test-tf test-rules test-ansible && make e2e
 
 ## 8. Việc còn lại
 
-Đã làm thêm sau khi tắt lab (không cần cluster): dashboard Grafana (#35, đóng), alert mới
-`DetectorDown` (phát hiện khi soạn diễn tập: detector không khởi động được thì `CameraDown`
-không bao giờ bắn), [kế hoạch diễn tập](drills.md), [postmortem đầu tiên](postmortems/2026-10-25-first-cloud-deploy.md),
-ADR-006 + `scripts/rotate-secret.sh`, gitleaks quét sạch lịch sử 2 repo, `scripts/teardown.sh`,
-README cuối, 3 workflow CI (actionlint sạch).
+Đã hoàn thành sau báo cáo đầu: dashboard (#35), k3d 2 cluster (#20), quản lý + xoay vòng secret
+chạy thật (#36), **cả 8 bài diễn tập trên lab thật** (#38, kết quả trong [drills.md](drills.md)),
+2 postmortem, README cuối và `teardown.sh` (#39). Diễn tập tìm ra 4 lỗi thật và đã sửa (bảng mục 6).
 
-| Issue | Còn thiếu | Cần gì |
+| Việc | Vì sao chưa xong | Cần gì |
 |---|---|---|
-| #27, #28, #30 CI | Workflow nằm ở `ci/workflows/` và nhánh local `ci/workflows`, chưa ở `.github/workflows` | **Bạn** chạy `gh auth refresh -h github.com -s workflow -u HuanNguyen09`, rồi làm theo `ci/workflows/README.md`; thêm variable `AWS_ACCOUNT_ID`, secret `GITOPS_DEPLOY_KEY` |
-| #36 Secrets | Chạy thử `rotate-secret.sh site-api-key` trên lab đang bật | Lab bật (sáng mai) |
-| #38 Drills | 5/8 bài cần lab bật + ảnh chụp alert | Lab bật; Telegram để thấy alert trên điện thoại |
-| #39 Demo | Video ≤ 3 phút | **Bạn** quay (intrusion → Telegram, release qua Git, rollback bằng revert) |
-| #20 k3d | Lab 2 cluster k3d chưa chạy trọn vẹn (máy laptop yếu) | Chạy `scripts/k3d.sh` trên dev box |
-| #2 Guardrails | Telegram bot | **Bạn** tạo bot (BotFather), mình ghi token vào SSM `/minieyes/cloud/telegram-bot-token` và `chat_id` vào repo GitOps |
-| Dọn dẹp | Root access key | **Bạn** xoá trong console (Security credentials) |
-
-Gợi ý thứ tự sáng mai: `lab-power.sh up` → kiểm tra `status` → chạy `rotate-secret.sh site-api-key`
-→ các diễn tập 1, 3, 7 (nhanh, thấy ngay trong Grafana) → `lab-power.sh down`.
+| Bật CI (#27, #28, #30) | GitHub từ chối push vào `.github/workflows` khi token thiếu scope `workflow` (mình không tự cấp được) | **Bạn**: `gh auth refresh -h github.com -s workflow -u HuanNguyen09`, rồi làm theo `ci/workflows/README.md` |
+| Video demo (#39) | Cần người quay màn hình | **Bạn** quay ≤ 3 phút: intrusion → Grafana/Telegram, release qua Git, rollback bằng revert |
+| Telegram (#2) | Cần tạo bot bằng tài khoản Telegram của bạn | **Bạn** tạo bot (BotFather); mình ghi token vào SSM và `chat_id` vào repo GitOps |
+| Root access key | Chỉ bạn xoá được trong console | Security credentials → Access keys → Delete |
