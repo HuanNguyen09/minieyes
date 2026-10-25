@@ -2,134 +2,117 @@
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "OnlySingaporeExceptGlobalServices",
-      "Effect": "Deny",
-      "NotAction": [
-        "iam:*",
-        "sts:*",
-        "budgets:*",
-        "ce:*",
-        "s3:ListAllMyBuckets"
-      ],
-      "Resource": "*",
-      "Condition": {
-        "StringNotEquals": {
-          "aws:RequestedRegion": "ap-southeast-1"
-        }
-      }
-    },
-    {
-      "Sid": "OnlyCheapInstanceTypes",
-      "Effect": "Deny",
-      "Action": "ec2:RunInstances",
-      "Resource": "arn:aws:ec2:*:*:instance/*",
-      "Condition": {
-        "StringNotLike": {
-          "ec2:InstanceType": [
-            "m6i.large",
-            "t3.micro",
-            "t3.small",
-            "t3.medium"
-          ]
-        }
-      }
-    },
-    {
-      "Sid": "NeverStopOrTerminateProtectedInstances",
-      "Effect": "Deny",
-      "Action": [
-        "ec2:StopInstances",
-        "ec2:TerminateInstances",
-        "ec2:ModifyInstanceAttribute",
-        "ec2:DisassociateIamInstanceProfile",
-        "ec2:ReplaceIamInstanceProfileAssociation",
-        "ec2:DeleteTags",
-        "ec2:CreateTags"
-      ],
-      "Resource": "arn:aws:ec2:*:*:instance/*",
-      "Condition": {
-        "StringEquals": {
-          "aws:ResourceTag/minieyes:protect": "true"
-        }
-      }
-    },
-    {
-      "Sid": "ComputeNetworkAndKubernetes",
+      "Sid": "NetworkAndInstances",
       "Effect": "Allow",
-      "Action": [
-        "ec2:*",
-        "autoscaling:*",
-        "elasticloadbalancing:*",
-        "eks:*",
-        "ecr:*",
-        "logs:*",
-        "ssm:GetParameter",
-        "ssm:GetParameters"
-      ],
+      "Action": "ec2:*",
       "Resource": "*"
     },
     {
-      "Sid": "KmsForEksSecretsEncryption",
+      "Sid": "ReadOnlyLoadBalancingAndScaling",
+      "Effect": "Allow",
+      "Action": ["elasticloadbalancing:Describe*", "autoscaling:Describe*"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "EksOnlyMiniEyesClusters",
+      "Effect": "Allow",
+      "Action": "eks:*",
+      "Resource": [
+        "arn:aws:eks:ap-southeast-1:*:cluster/minieyes-*",
+        "arn:aws:eks:ap-southeast-1:*:nodegroup/minieyes-*/*/*",
+        "arn:aws:eks:ap-southeast-1:*:addon/minieyes-*/*/*",
+        "arn:aws:eks:ap-southeast-1:*:access-entry/minieyes-*/*",
+        "arn:aws:eks:ap-southeast-1:*:podidentityassociation/minieyes-*/*",
+        "arn:aws:eks:ap-southeast-1:*:fargateprofile/minieyes-*/*/*"
+      ]
+    },
+    {
+      "Sid": "EksDiscovery",
+      "Effect": "Allow",
+      "Action": ["eks:List*", "eks:Describe*", "eks:AssociateAccessPolicy", "eks:DisassociateAccessPolicy"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "EcrOnlyMiniEyesRepositories",
+      "Effect": "Allow",
+      "Action": "ecr:*",
+      "Resource": "arn:aws:ecr:ap-southeast-1:*:repository/minieyes*"
+    },
+    {
+      "Sid": "EcrLogin",
+      "Effect": "Allow",
+      "Action": ["ecr:GetAuthorizationToken", "ecr:DescribeRegistry", "ecr:DescribeRepositories"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "EksLogGroups",
+      "Effect": "Allow",
+      "Action": "logs:*",
+      "Resource": "arn:aws:logs:ap-southeast-1:*:log-group:/aws/eks/minieyes-*"
+    },
+    {
+      "Sid": "LogsDiscovery",
+      "Effect": "Allow",
+      "Action": ["logs:DescribeLogGroups", "logs:ListTagsForResource"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "KmsCreateOnlyTaggedKeys",
+      "Effect": "Allow",
+      "Action": ["kms:CreateKey", "kms:TagResource"],
+      "Resource": "*",
+      "Condition": {"StringEquals": {"aws:RequestTag/Project": "minieyes"}}
+    },
+    {
+      "Sid": "KmsUseOnlyMiniEyesKeys",
       "Effect": "Allow",
       "Action": [
-        "kms:CreateKey",
-        "kms:DescribeKey",
-        "kms:ListKeys",
-        "kms:ListAliases",
-        "kms:CreateAlias",
-        "kms:DeleteAlias",
-        "kms:TagResource",
-        "kms:UntagResource",
-        "kms:ListResourceTags",
-        "kms:GetKeyPolicy",
-        "kms:PutKeyPolicy",
-        "kms:GetKeyRotationStatus",
-        "kms:EnableKeyRotation",
-        "kms:ScheduleKeyDeletion",
-        "kms:CreateGrant",
-        "kms:Encrypt",
-        "kms:Decrypt",
-        "kms:GenerateDataKey"
+        "kms:DescribeKey", "kms:GetKeyPolicy", "kms:PutKeyPolicy", "kms:GetKeyRotationStatus",
+        "kms:EnableKeyRotation", "kms:ScheduleKeyDeletion", "kms:ListResourceTags",
+        "kms:UntagResource", "kms:CreateGrant", "kms:Encrypt", "kms:Decrypt",
+        "kms:GenerateDataKey*", "kms:CreateAlias", "kms:DeleteAlias"
       ],
+      "Resource": "arn:aws:kms:ap-southeast-1:*:key/*",
+      "Condition": {"StringEquals": {"aws:ResourceTag/Project": "minieyes"}}
+    },
+    {
+      "Sid": "KmsAliases",
+      "Effect": "Allow",
+      "Action": ["kms:CreateAlias", "kms:DeleteAlias"],
+      "Resource": ["arn:aws:kms:ap-southeast-1:*:alias/minieyes-*", "arn:aws:kms:ap-southeast-1:*:alias/eks/minieyes-*"]
+    },
+    {
+      "Sid": "KmsDiscovery",
+      "Effect": "Allow",
+      "Action": ["kms:ListKeys", "kms:ListAliases"],
       "Resource": "*"
     },
     {
       "Sid": "TerraformStateBucket",
       "Effect": "Allow",
       "Action": "s3:*",
-      "Resource": [
-        "arn:aws:s3:::minieyes-tfstate-*",
-        "arn:aws:s3:::minieyes-tfstate-*/*"
-      ]
+      "Resource": ["arn:aws:s3:::minieyes-tfstate-*", "arn:aws:s3:::minieyes-tfstate-*/*"]
     },
     {
-      "Sid": "ListBuckets",
+      "Sid": "ParametersAmiLookupAndProjectSecrets",
       "Effect": "Allow",
-      "Action": "s3:ListAllMyBuckets",
-      "Resource": "*"
+      "Action": [
+        "ssm:GetParameter", "ssm:GetParameters", "ssm:GetParametersByPath", "ssm:PutParameter",
+        "ssm:DeleteParameter", "ssm:AddTagsToResource", "ssm:ListTagsForResource"
+      ],
+      "Resource": [
+        "arn:aws:ssm:ap-southeast-1:*:parameter/minieyes/*",
+        "arn:aws:ssm:ap-southeast-1::parameter/aws/service/*"
+      ]
     },
     {
       "Sid": "BudgetAlarms",
       "Effect": "Allow",
       "Action": [
-        "budgets:*",
-        "ce:GetCostAndUsage"
+        "budgets:ViewBudget", "budgets:ModifyBudget", "budgets:ListTagsForResource",
+        "budgets:TagResource", "budgets:UntagResource"
       ],
       "Resource": "*"
-    },
-    {
-      "Sid": "SecretsInParameterStore",
-      "Effect": "Allow",
-      "Action": [
-        "ssm:PutParameter",
-        "ssm:GetParameter",
-        "ssm:GetParameters",
-        "ssm:GetParametersByPath",
-        "ssm:DeleteParameter",
-        "ssm:AddTagsToResource",
-        "ssm:ListTagsForResource"
-      ],
-      "Resource": "arn:aws:ssm:ap-southeast-1:*:parameter/minieyes/*"
     }
   ]
 }

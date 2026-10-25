@@ -8,58 +8,72 @@
       "Resource": "*"
     },
     {
-      "Sid": "ManageOnlyMiniEyesRolesAndPolicies",
+      "Sid": "RolesOnlyWithTheWorkloadBoundary",
       "Effect": "Allow",
       "Action": [
-        "iam:CreateRole", "iam:DeleteRole", "iam:UpdateRole", "iam:UpdateAssumeRolePolicy",
-        "iam:TagRole", "iam:UntagRole",
+        "iam:CreateRole", "iam:PutRolePermissionsBoundary",
         "iam:AttachRolePolicy", "iam:DetachRolePolicy",
-        "iam:PutRolePolicy", "iam:DeleteRolePolicy",
-        "iam:CreatePolicy", "iam:DeletePolicy", "iam:CreatePolicyVersion",
-        "iam:DeletePolicyVersion", "iam:TagPolicy", "iam:UntagPolicy",
-        "iam:CreateInstanceProfile", "iam:DeleteInstanceProfile",
-        "iam:AddRoleToInstanceProfile", "iam:RemoveRoleFromInstanceProfile",
-        "iam:TagInstanceProfile", "iam:PassRole"
+        "iam:PutRolePolicy", "iam:DeleteRolePolicy"
       ],
-      "Resource": [
-        "arn:aws:iam::*:role/minieyes-*",
-        "arn:aws:iam::*:policy/minieyes-*",
-        "arn:aws:iam::*:instance-profile/minieyes-*"
-      ]
+      "Resource": "arn:aws:iam::*:role/minieyes-*",
+      "Condition": {"StringEquals": {
+        "iam:PermissionsBoundary": "arn:aws:iam::${aws:PrincipalAccount}:policy/Boundary-MiniEyes-Workload"
+      }}
     },
     {
-      "Sid": "OidcProvidersForGitHubAndEks",
+      "Sid": "OtherRoleChanges",
+      "Effect": "Allow",
+      "Action": [
+        "iam:DeleteRole", "iam:UpdateRole", "iam:UpdateRoleDescription",
+        "iam:UpdateAssumeRolePolicy", "iam:TagRole", "iam:UntagRole"
+      ],
+      "Resource": "arn:aws:iam::*:role/minieyes-*"
+    },
+    {
+      "Sid": "PassRolesOnlyToEc2AndEks",
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": "arn:aws:iam::*:role/minieyes-*",
+      "Condition": {"StringEquals": {"iam:PassedToService": [
+        "ec2.amazonaws.com", "eks.amazonaws.com", "pods.eks.amazonaws.com"
+      ]}}
+    },
+    {
+      "Sid": "ProjectManagedPolicies",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreatePolicy", "iam:DeletePolicy", "iam:CreatePolicyVersion",
+        "iam:DeletePolicyVersion", "iam:SetDefaultPolicyVersion", "iam:TagPolicy", "iam:UntagPolicy"
+      ],
+      "Resource": "arn:aws:iam::*:policy/minieyes-*"
+    },
+    {
+      "Sid": "InstanceProfiles",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateInstanceProfile", "iam:DeleteInstanceProfile", "iam:TagInstanceProfile",
+        "iam:UntagInstanceProfile", "iam:AddRoleToInstanceProfile", "iam:RemoveRoleFromInstanceProfile"
+      ],
+      "Resource": "arn:aws:iam::*:instance-profile/minieyes-*"
+    },
+    {
+      "Sid": "GitHubOidcProvider",
       "Effect": "Allow",
       "Action": [
         "iam:CreateOpenIDConnectProvider", "iam:DeleteOpenIDConnectProvider",
         "iam:UpdateOpenIDConnectProviderThumbprint", "iam:TagOpenIDConnectProvider",
-        "iam:AddClientIDToOpenIDConnectProvider"
+        "iam:UntagOpenIDConnectProvider"
       ],
-      "Resource": [
-        "arn:aws:iam::*:oidc-provider/token.actions.githubusercontent.com",
-        "arn:aws:iam::*:oidc-provider/oidc.eks.ap-southeast-1.amazonaws.com/*"
-      ]
+      "Resource": "arn:aws:iam::*:oidc-provider/token.actions.githubusercontent.com"
     },
     {
-      "Sid": "ServiceLinkedRolesAwsNeeds",
+      "Sid": "ServiceLinkedRolesForEks",
       "Effect": "Allow",
       "Action": "iam:CreateServiceLinkedRole",
-      "Resource": "*",
+      "Resource": "arn:aws:iam::*:role/aws-service-role/*",
       "Condition": {"StringEquals": {"iam:AWSServiceName": [
-        "eks.amazonaws.com", "eks-nodegroup.amazonaws.com",
-        "autoscaling.amazonaws.com", "elasticloadbalancing.amazonaws.com",
-        "spot.amazonaws.com"
-      ]}}
-    },
-    {
-      "Sid": "NeverGrantAdminToMiniEyesRoles",
-      "Effect": "Deny",
-      "Action": "iam:AttachRolePolicy",
-      "Resource": "*",
-      "Condition": {"ArnLike": {"iam:PolicyARN": [
-        "arn:aws:iam::aws:policy/AdministratorAccess",
-        "arn:aws:iam::aws:policy/IAMFullAccess",
-        "arn:aws:iam::aws:policy/PowerUserAccess"
+        "eks.amazonaws.com", "eks-nodegroup.amazonaws.com", "autoscaling.amazonaws.com",
+        "elasticloadbalancing.amazonaws.com", "spot.amazonaws.com"
       ]}}
     }
   ]

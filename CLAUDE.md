@@ -10,6 +10,7 @@ Read `PRD.md` first. Work is tracked as GitHub issues in `HuanNguyen09/minieyes`
 - Test markers: default = unit (no network, no Docker, < 60 s total); `integration` needs Docker; `e2e` needs `docker compose up`.
 - Metric names and labels must match PRD §7.2; alert names must match PRD §7.3.
 - Lint/format: `ruff check` and `ruff format`. Type hints everywhere.
+- AWS: every IAM role is named `minieyes-*` with permissions boundary `Boundary-MiniEyes-Workload`; every resource is tagged `Project=minieyes` (see `infra/aws/iam/README.md`). Never use Bedrock.
 - Commit messages reference the issue: `feat(detector): debounce intrusions (#5)`; PRs use `Closes #N`.
 
 ## Commands

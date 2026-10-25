@@ -1,0 +1,55 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "CeilingForEveryMiniEyesRole",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:*", "elasticloadbalancing:*", "autoscaling:Describe*",
+        "ecr:*", "eks:Describe*", "eks:List*", "eks-auth:AssumeRoleForPodIdentity",
+        "kms:Describe*", "kms:List*", "kms:Get*", "kms:CreateGrant", "kms:Encrypt", "kms:Decrypt",
+        "kms:ReEncrypt*", "kms:GenerateDataKey*",
+        "logs:*", "iam:Get*", "iam:List*", "budgets:ViewBudget", "sts:GetCallerIdentity"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "TerraformStateForThePlanRole",
+      "Effect": "Allow",
+      "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:ListBucket", "s3:GetBucket*"],
+      "Resource": ["arn:aws:s3:::minieyes-tfstate-*", "arn:aws:s3:::minieyes-tfstate-*/*"]
+    },
+    {
+      "Sid": "ReadParameters",
+      "Effect": "Allow",
+      "Action": ["ssm:GetParameter", "ssm:GetParameters", "ssm:GetParametersByPath"],
+      "Resource": [
+        "arn:aws:ssm:ap-southeast-1:*:parameter/minieyes/*",
+        "arn:aws:ssm:ap-southeast-1::parameter/aws/service/*"
+      ]
+    },
+    {
+      "Sid": "LoadBalancerServiceLinkedRole",
+      "Effect": "Allow",
+      "Action": "iam:CreateServiceLinkedRole",
+      "Resource": "arn:aws:iam::*:role/aws-service-role/*",
+      "Condition": {"StringEquals": {"iam:AWSServiceName": "elasticloadbalancing.amazonaws.com"}}
+    },
+    {
+      "Sid": "NoBedrockOrPaidAiModels",
+      "Effect": "Deny",
+      "Action": ["bedrock:*", "bedrock-agentcore:*", "sagemaker:*", "aws-marketplace:*", "q:*", "qbusiness:*"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "WorkloadsNeverRetargetInstances",
+      "Effect": "Deny",
+      "Action": [
+        "ec2:ModifyInstanceAttribute", "ec2:AssociateIamInstanceProfile",
+        "ec2:ReplaceIamInstanceProfileAssociation", "ec2:RunInstances", "ec2:CreateImage",
+        "ec2:GetPasswordData", "ec2:CreateLaunchTemplateVersion", "ec2:ModifyLaunchTemplate"
+      ],
+      "Resource": "*"
+    }
+  ]
+}

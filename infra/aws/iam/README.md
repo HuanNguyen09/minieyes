@@ -1,38 +1,59 @@
-# Deployer IAM user
+# AWS access for MiniEyes
 
-Terraform runs as an IAM user `minieyes-deployer` with two customer-managed policies,
-never as root and never with `AdministratorAccess`.
+Claude Code runs on a dev-box EC2 whose instance role carries the deployer policies, so Terraform
+uses short-lived instance credentials and **no access key exists anywhere**.
 
-| Policy | What it allows |
+## Policies
+
+| Policy | Kind | Purpose |
+|---|---|---|
+| `Deployer-MiniEyes-Infra` (`deployer-infra.json`) | allow | EC2/VPC, EKS clusters `minieyes-*`, ECR repos `minieyes*`, EKS log groups, KMS keys tagged `Project=minieyes`, the `minieyes-tfstate-*` bucket, SSM parameters `/minieyes/*`, Budgets. Load balancers and Auto Scaling are read-only. |
+| `Deployer-MiniEyes-Iam` (`deployer-iam.json`) | allow | Roles, policies and instance profiles named `minieyes-*` and the GitHub OIDC provider. **A role can only be created or given permissions if it carries the workload boundary.** Roles can be passed only to EC2 and EKS. |
+| `Deployer-MiniEyes-Guardrails` (`deployer-guardrails.json`) | deny | Explicit denies that win over any allow (see below). |
+| `Boundary-MiniEyes-Workload` (`workload-boundary.json`) | permissions boundary | The ceiling for every `minieyes-*` role Terraform creates: what EKS, nodes, EBS CSI, the edge EC2 and the GitHub roles need, no IAM writes, no Bedrock. |
+| `AmazonSSMManagedInstanceCore` | AWS managed | Session Manager access to the dev box, so it needs no inbound port. |
+
+## Why the dev box cannot escalate
+
+| Escalation path | Blocked by |
 |---|---|
-| `deployer-infra.json` → `MiniEyesDeployerInfra` | EC2/VPC, EKS, ECR, ELB, Auto Scaling, CloudWatch Logs, KMS, the `minieyes-tfstate-*` bucket and Budgets. Everything except IAM/STS/Budgets is denied outside `ap-southeast-1`, and `RunInstances` is denied for any type other than `m6i.large` / `t3.micro|small|medium`. |
-| `deployer-iam.json` → `MiniEyesDeployerIam` | Create and change only `minieyes-*` roles, policies and instance profiles, the GitHub and EKS OIDC providers, and the service-linked roles EKS needs. Attaching `AdministratorAccess`, `IAMFullAccess` or `PowerUserAccess` is denied. |
+| Create a role with `*:*` and launch an EC2 with it | Every `minieyes-*` role must carry `Boundary-MiniEyes-Workload` (allow condition + explicit deny); effective permissions = policy ∩ boundary, and the boundary has no IAM writes. |
+| Remove or swap the boundary | `iam:DeleteRolePermissionsBoundary` denied; `PutRolePermissionsBoundary` only to the same boundary. |
+| Edit its own or the boundary's policies | They are named `Deployer-*` / `Boundary-*` and the role `DevBox-*`, outside `minieyes-*`; all other IAM writes are denied. |
+| Create users, access keys or login profiles | Denied (not a `minieyes-*` role/policy/profile). |
+| Assume another role | `sts:AssumeRole` denied outright. |
+| Pass a privileged existing role to a new instance | `iam:PassRole` only on `minieyes-*` roles, only to EC2/EKS. |
+| Hijack another instance (user data, instance profile, stop/start, snapshots, launch templates) | Denied unless the resource is tagged `Project=minieyes`, and existing resources cannot be re-tagged into the project. |
+| Read other projects' secrets from SSM Parameter Store | Only `/minieyes/*` and public `/aws/service/*` are readable. |
+| Take over another EKS cluster | EKS writes only on clusters named `minieyes-*`. |
 
-The deployer policies are deliberately **not** named `minieyes-*`, so the user cannot edit its own permissions.
+**Bedrock / paid AI:** `bedrock:*`, `bedrock-agentcore:*`, `sagemaker:*`, `q:*`, `qbusiness:*`
+and `aws-marketplace:*` (model subscriptions) are explicitly denied for the dev box and inside the
+boundary, so no project role can call them either.
 
-Known gap (accepted for a lab account): a `minieyes-*` role could still be given broad inline
-permissions. Production would add a permissions boundary on every role Terraform creates.
+Cost guards: everything outside `ap-southeast-1` is denied (except global IAM/STS/Budgets), and
+`RunInstances` only allows `m6i.large` and `t3.micro|small|medium`.
 
-## Setup (once, as an admin in the console)
-1. IAM → Policies → Create policy → JSON → paste each file → name as above.
-2. IAM → Users → Create user `minieyes-deployer` (no console access) → attach both policies.
-3. User → Security credentials → Create access key → "Command Line Interface".
-4. In WSL: `aws configure --profile minieyes` (region `ap-southeast-1`, output `json`).
-5. Check: `aws sts get-caller-identity --profile minieyes`.
+`test_policies.py` checks these invariants offline:
+`uv run --no-project --with pytest pytest infra/aws/iam -q`.
 
-Rotate the key when the project ends, or delete the user after `terraform destroy`.
+### Residual risks (accepted for a lab; say so in reviews)
+- `iam:UpdateAssumeRolePolicy` on `minieyes-*` roles could add an external trust; that principal
+  would still be capped by the boundary. IAM Access Analyzer (external access) flags it.
+- `ec2:*` can still change networking (security groups, routes) of non-project VPCs.
+- Strongest isolation: a dedicated AWS account for MiniEyes, plus an SCP denying Bedrock if the
+  account is in AWS Organizations.
 
-## Dev box (preferred): an EC2 with an instance role, no access keys
-
-Claude Code runs on an EC2 instance whose role carries the same two policies, so Terraform
-uses short-lived instance credentials and no access key exists anywhere.
-
-1. AWS CloudShell in `ap-southeast-1`:
+## Setup (once)
+1. AWS CloudShell in `ap-southeast-1`, as an admin (not root):
    `git clone https://github.com/HuanNguyen09/minieyes && bash minieyes/infra/aws/iam/create-devbox-role.sh`
-   (creates `MiniEyesDeployerInfra`, `MiniEyesDeployerIam`, role + instance profile
-   `DevBox-MiniEyes-Claude` with `AmazonSSMManagedInstanceCore`).
-2. Launch the instance: Ubuntu 24.04, `t3.xlarge` (4 vCPU / 16 GiB), gp3 **100 GB** (Docker
-   images incl. Triton), IMDSv2 required, instance profile `DevBox-MiniEyes-Claude`,
-   tag `minieyes:protect=true` (the role cannot stop, terminate or re-role a protected instance),
-   security group with **no inbound rules** — connect with SSM Session Manager or EC2 Instance Connect.
-3. Stop it when idle (~0.21 USD/h running in Singapore; the EBS volume is billed while stopped).
+2. Launch the dev box: Ubuntu 24.04, `t3.xlarge`, gp3 100 GB, IMDSv2 required,
+   instance profile `DevBox-MiniEyes-Claude`, security group with **no inbound rules**.
+   Do **not** tag it `Project=minieyes` — untagged, the role cannot stop, modify or re-role it.
+3. Connect with Session Manager. Stop the instance when idle (~0.21 USD/h; the disk is billed while stopped).
+
+## Terraform rule
+Every IAM role Terraform creates must be named `minieyes-*` and set
+`permissions_boundary = "arn:aws:iam::<account>:policy/Boundary-MiniEyes-Workload"`
+(terraform-aws-modules: `iam_role_permissions_boundary`), and every resource must carry
+`Project = "minieyes"` (provider `default_tags`). Otherwise the apply is denied.
