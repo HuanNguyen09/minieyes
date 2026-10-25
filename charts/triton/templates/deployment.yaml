@@ -9,6 +9,10 @@ metadata:
     app.kubernetes.io/version: {{ .Values.image.tag | quote }}
 spec:
   replicas: 1
+  # Single-node edge: a surge pod cannot fit next to the running one (CPU), so replace in place.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxSurge: 0, maxUnavailable: 1 }
   selector:
     matchLabels:
       app.kubernetes.io/name: triton

@@ -71,3 +71,14 @@ tests:
       - contains:
           path: spec.ports
           content: { name: metrics, port: 8002, targetPort: metrics }
+
+  # Drill 2 (2026-10-25): on the single 2-vCPU edge node a surge pod (1 CPU request) next to the
+  # running one stayed Pending forever, so every Triton rollout would hang.
+  - it: replaces the pod in place on a single-node edge instead of surging
+    template: deployment.yaml
+    asserts:
+      - equal:
+          path: spec.strategy
+          value:
+            type: RollingUpdate
+            rollingUpdate: { maxSurge: 0, maxUnavailable: 1 }
