@@ -1,0 +1,102 @@
+suite: detector deployment
+templates:
+  - deployment.yaml
+  - configmap-zones.yaml
+release:
+  name: detector
+  namespace: minieyes
+tests:
+  - it: has startup, liveness and readiness probes on /healthz
+    template: deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.path
+          value: /healthz
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.path
+          value: /healthz
+      # cv2 + tritonclient imports take seconds; liveness must not kill a starting pod
+      - isNotNullOrEmpty:
+          path: spec.template.spec.containers[0].startupProbe
+
+  - it: sets requests and limits on every container
+    template: deployment.yaml
+    asserts:
+      - isNotNullOrEmpty:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+      - isNotNullOrEmpty:
+          path: spec.template.spec.containers[0].resources.requests.memory
+      - isNotNullOrEmpty:
+          path: spec.template.spec.containers[0].resources.limits.cpu
+      - isNotNullOrEmpty:
+          path: spec.template.spec.containers[0].resources.limits.memory
+
+  - it: runs non-root without privilege escalation and with a read-only root filesystem
+    template: deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+      - contains:
+          path: spec.template.spec.containers[0].securityContext.capabilities.drop
+          content: ALL
+      - equal:
+          path: spec.template.spec.securityContext.seccompProfile.type
+          value: RuntimeDefault
+
+  - it: makes the site a pod label and an env var
+    template: deployment.yaml
+    set:
+      site: site-07
+    asserts:
+      - equal:
+          path: spec.template.metadata.labels["minieyes.io/site"]
+          value: site-07
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MINIEYES_SITE
+            value: site-07
+
+  - it: reads the API key from a mounted Secret, never from values
+    template: deployment.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MINIEYES_API_KEY_FILE
+            value: /var/run/secrets/minieyes/api-key
+      - notContains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MINIEYES_API_KEY
+          any: true
+
+  - it: joins cameras into MINIEYES_CAMERAS
+    template: deployment.yaml
+    set:
+      cameras:
+        cam1: rtsp://camera-sim:8554/cam1
+        cam2: rtsp://10.0.0.7/stream
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MINIEYES_CAMERAS
+            value: cam1=rtsp://camera-sim:8554/cam1,cam2=rtsp://10.0.0.7/stream
+
+  - it: never runs two detectors for the same cameras at once
+    template: deployment.yaml
+    asserts:
+      - equal:
+          path: spec.strategy.type
+          value: Recreate
+      - equal:
+          path: spec.replicas
+          value: 1

@@ -1,0 +1,45 @@
+suite: detector zones config
+templates:
+  - configmap-zones.yaml
+  - deployment.yaml
+release:
+  name: detector
+  namespace: minieyes
+tests:
+  - it: renders the zones file from values
+    template: configmap-zones.yaml
+    set:
+      zones:
+        cam1:
+          zones:
+            - name: forklift-lane
+              polygon: [[420, 360], [880, 360], [960, 720]]
+    asserts:
+      - matchRegex:
+          path: data["zones.yaml"]
+          pattern: "name: forklift-lane"
+      - matchRegex:
+          path: data["zones.yaml"]
+          pattern: "^cameras:"
+
+  - it: mounts the zones file where the detector reads it
+    template: deployment.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MINIEYES_ZONES_FILE
+            value: /config/zones.yaml
+
+  - it: rolls the pods when the zones change
+    template: deployment.yaml
+    set:
+      zones:
+        cam1:
+          zones:
+            - name: lane-a
+              polygon: [[0, 0], [10, 0], [10, 10]]
+    asserts:
+      - matchRegex:
+          path: spec.template.metadata.annotations["checksum/zones"]
+          pattern: "^[0-9a-f]{64}$"

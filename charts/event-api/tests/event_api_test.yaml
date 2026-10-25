@@ -1,0 +1,143 @@
+suite: event-api
+templates:
+  - deployment.yaml
+  - service.yaml
+  - ingress.yaml
+  - hpa.yaml
+  - job-migrate.yaml
+release:
+  name: event-api
+  namespace: minieyes
+tests:
+  - it: has liveness on /healthz and readiness on /readyz
+    template: deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.path
+          value: /healthz
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.path
+          value: /readyz
+
+  - it: sets requests and limits
+    template: deployment.yaml
+    asserts:
+      - isNotNullOrEmpty:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+      - isNotNullOrEmpty:
+          path: spec.template.spec.containers[0].resources.limits.memory
+
+  - it: runs non-root without privilege escalation
+    template: deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+
+  - it: takes the database URL and key digests from a Secret
+    template: deployment.yaml
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MINIEYES_DATABASE_URL
+            valueFrom:
+              secretKeyRef:
+                name: event-api-secrets
+                key: database-url
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: MINIEYES_API_KEYS
+            valueFrom:
+              secretKeyRef:
+                name: event-api-secrets
+                key: api-keys
+
+  - it: renders no Ingress by default
+    template: ingress.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders an Ingress with TLS when enabled
+    template: ingress.yaml
+    set:
+      ingress:
+        enabled: true
+        host: events.203-0-113-10.sslip.io
+        clusterIssuer: letsencrypt
+    asserts:
+      - equal:
+          path: spec.rules[0].host
+          value: events.203-0-113-10.sslip.io
+      - equal:
+          path: spec.tls[0].hosts[0]
+          value: events.203-0-113-10.sslip.io
+      - equal:
+          path: metadata.annotations["cert-manager.io/cluster-issuer"]
+          value: letsencrypt
+
+  - it: renders no HPA by default
+    template: hpa.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders an HPA on CPU when enabled
+    template: hpa.yaml
+    set:
+      autoscaling:
+        enabled: true
+        minReplicas: 2
+        maxReplicas: 4
+    asserts:
+      - equal:
+          path: spec.maxReplicas
+          value: 4
+      - equal:
+          path: spec.metrics[0].resource.name
+          value: cpu
+
+  - it: does not pin replicas when the HPA owns them
+    template: deployment.yaml
+    set:
+      autoscaling:
+        enabled: true
+    asserts:
+      - notExists:
+          path: spec.replicas
+
+  # Argo CD order: wave -1 Postgres (healthy) -> wave 0 migrate Job -> wave 1 API.
+  # A PreSync hook would run before Postgres exists on the very first sync and never succeed.
+  - it: migrates after Postgres is up and before the API rolls, for Argo CD and Helm
+    template: job-migrate.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].command
+          value: [python, -m, minieyes_api.migrate]
+      - equal:
+          path: metadata.annotations["argocd.argoproj.io/hook"]
+          value: Sync
+      - equal:
+          path: metadata.annotations["argocd.argoproj.io/sync-wave"]
+          value: "0"
+      - equal:
+          path: metadata.annotations["helm.sh/hook"]
+          value: post-install,pre-upgrade
+      - equal:
+          path: spec.template.spec.restartPolicy
+          value: Never
+
+  - it: starts the API in the wave after the migration
+    template: deployment.yaml
+    asserts:
+      - equal:
+          path: metadata.annotations["argocd.argoproj.io/sync-wave"]
+          value: "1"

@@ -1,0 +1,21 @@
+# Triton is pinned here and only here (ADR-005). Compose and CI use OVMS instead.
+image:
+  repository: nvcr.io/nvidia/tritonserver
+  tag: 26.08-py3
+  pullPolicy: IfNotPresent
+
+# OCI image holding /models (built from triton/Dockerfile.model, pushed to ECR by CI)
+model:
+  image: minieyes-model-yolov8n:dev
+  pullPolicy: IfNotPresent
+
+resources:
+  requests:
+    cpu: "1"
+    memory: 1Gi
+  limits:
+    cpu: "1500m"
+    memory: 2Gi
+
+nodeSelector: {}
+tolerations: []

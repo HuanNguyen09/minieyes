@@ -1,0 +1,55 @@
+suite: bundled postgres
+templates:
+  - postgres.yaml
+release:
+  name: event-api
+  namespace: minieyes
+tests:
+  - it: is not rendered when an external database is used
+    set:
+      postgres:
+        enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: keeps data on a PVC of the configured storage class
+    documentSelector:
+      path: kind
+      value: StatefulSet
+    asserts:
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.storageClassName
+          value: gp3
+      - equal:
+          path: spec.volumeClaimTemplates[0].spec.resources.requests.storage
+          value: 5Gi
+
+  - it: reads its password from the Secret and runs as the postgres user
+    documentSelector:
+      path: kind
+      value: StatefulSet
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].env
+          content:
+            name: POSTGRES_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: event-api-secrets
+                key: postgres-password
+      - equal:
+          path: spec.template.spec.securityContext.runAsUser
+          value: 70
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+
+  - it: syncs before the migration Job
+    documentSelector:
+      path: kind
+      value: StatefulSet
+    asserts:
+      - equal:
+          path: metadata.annotations["argocd.argoproj.io/sync-wave"]
+          value: "-1"

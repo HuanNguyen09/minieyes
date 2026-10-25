@@ -1,0 +1,12 @@
+image:
+  repository: minieyes-camera-sim
+  tag: dev
+  pullPolicy: IfNotPresent
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 64Mi
+  limits:
+    cpu: 500m
+    memory: 192Mi

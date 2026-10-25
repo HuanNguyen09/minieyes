@@ -1,0 +1,45 @@
+# Edge detector. One release per site; values-edge.yaml in the GitOps repo sets the site.
+
+site: site-01
+
+image:
+  repository: minieyes-detector
+  tag: dev
+  pullPolicy: IfNotPresent
+
+# name -> RTSP URL; joined into MINIEYES_CAMERAS
+cameras:
+  cam1: rtsp://camera-sim:8554/cam1
+
+# Red zones per camera in frame pixels (rendered to /config/zones.yaml).
+zones:
+  cam1:
+    zones:
+      - name: walkway
+        polygon: [[0, 250], [768, 250], [768, 432], [0, 432]]
+
+triton:
+  url: triton:8001
+  model: yolov8n
+
+eventApi:
+  url: https://events.example.com
+  # Secret with the site API key (created out of band, see #36); never put the key in values.
+  apiKeySecret:
+    name: detector-api-key
+    key: api-key
+
+debounceFrames: 2
+cooldownSeconds: 30
+logLevel: INFO
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 384Mi
+  limits:
+    cpu: "1"
+    memory: 768Mi
+
+nodeSelector: {}
+tolerations: []

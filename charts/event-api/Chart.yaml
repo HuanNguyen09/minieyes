@@ -1,0 +1,6 @@
+apiVersion: v2
+name: event-api
+description: MiniEyes cloud Event API (+ optional bundled Postgres for the lab)
+type: application
+version: 0.1.0
+appVersion: "dev"

@@ -1,0 +1,9 @@
+# Edge site-01 (k3s on EC2). Images pulled from ECR via the instance profile.
+site: site-01
+image:
+  repository: 123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/minieyes/detector
+  tag: 0000000
+eventApi:
+  url: https://events.203-0-113-10.sslip.io
+triton:
+  url: triton:8001

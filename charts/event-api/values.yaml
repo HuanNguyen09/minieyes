@@ -1,0 +1,49 @@
+# Cloud Event API. Secrets (database URL, API key digests, Postgres password) live in the
+# `event-api-secrets` Secret, created out of band (see #36) — never in values files.
+
+replicaCount: 2
+
+image:
+  repository: minieyes-event-api
+  tag: dev
+  pullPolicy: IfNotPresent
+
+secretName: event-api-secrets  # keys: database-url, api-keys, postgres-password
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 192Mi
+  limits:
+    cpu: 500m
+    memory: 384Mi
+
+service:
+  port: 8000
+
+ingress:
+  enabled: false
+  className: traefik
+  host: events.example.com
+  clusterIssuer: letsencrypt
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 4
+  targetCPUUtilizationPercentage: 70
+
+# Bundled single-instance Postgres for the lab; point database-url elsewhere and disable it
+# for anything that needs backups or HA.
+postgres:
+  enabled: true
+  image: postgres:16.15-alpine
+  storageClass: gp3
+  size: 5Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi

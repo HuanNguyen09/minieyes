@@ -1,0 +1,73 @@
+suite: triton
+templates:
+  - deployment.yaml
+  - service.yaml
+release:
+  name: triton
+  namespace: minieyes
+tests:
+  - it: pins the Triton image in one place
+    template: deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: nvcr.io/nvidia/tritonserver:26.08-py3
+
+  - it: copies the model repository from the model image before Triton starts
+    template: deployment.yaml
+    set:
+      model:
+        image: 123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/minieyes/model-yolov8n:4ff46af
+    asserts:
+      - equal:
+          path: spec.template.spec.initContainers[0].image
+          value: 123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/minieyes/model-yolov8n:4ff46af
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --model-repository=/models
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --strict-readiness=true
+
+  - it: probes the KServe v2 health endpoints
+    template: deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.path
+          value: /v2/health/live
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.path
+          value: /v2/health/ready
+      - isNotNullOrEmpty:
+          path: spec.template.spec.containers[0].startupProbe
+
+  - it: sets requests and limits on Triton and the init container
+    template: deployment.yaml
+    asserts:
+      - isNotNullOrEmpty:
+          path: spec.template.spec.containers[0].resources.limits.memory
+      - isNotNullOrEmpty:
+          path: spec.template.spec.initContainers[0].resources.limits.memory
+
+  - it: runs non-root without privilege escalation
+    template: deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+      - equal:
+          path: spec.template.spec.initContainers[0].securityContext.allowPrivilegeEscalation
+          value: false
+
+  - it: exposes gRPC for the detector and HTTP metrics for Alloy
+    template: service.yaml
+    asserts:
+      - contains:
+          path: spec.ports
+          content: { name: grpc, port: 8001, targetPort: grpc }
+      - contains:
+          path: spec.ports
+          content: { name: metrics, port: 8002, targetPort: metrics }

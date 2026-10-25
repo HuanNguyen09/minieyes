@@ -1,0 +1,49 @@
+suite: camera-sim
+templates:
+  - deployment.yaml
+  - service.yaml
+release:
+  name: camera-sim
+  namespace: minieyes
+tests:
+  - it: probes the RTSP port
+    template: deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.tcpSocket.port
+          value: rtsp
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.tcpSocket.port
+          value: rtsp
+
+  - it: sets requests and limits
+    template: deployment.yaml
+    asserts:
+      - isNotNullOrEmpty:
+          path: spec.template.spec.containers[0].resources.requests.cpu
+      - isNotNullOrEmpty:
+          path: spec.template.spec.containers[0].resources.limits.memory
+
+  # verified with docker run --user 65534 --read-only --cap-drop ALL: healthy
+  - it: runs fully hardened
+    template: deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext.runAsNonRoot
+          value: true
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation
+          value: false
+      - equal:
+          path: spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem
+          value: true
+
+  - it: serves rtsp://camera-sim:8554/cam1 inside the cluster
+    template: service.yaml
+    asserts:
+      - equal:
+          path: metadata.name
+          value: camera-sim
+      - contains:
+          path: spec.ports
+          content: { name: rtsp, port: 8554, targetPort: rtsp }

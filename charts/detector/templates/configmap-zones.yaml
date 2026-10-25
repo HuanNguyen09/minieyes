@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-zones
+  labels:
+    {{- include "detector.labels" . | nindent 4 }}
+data:
+  zones.yaml: |
+    cameras:
+      {{- toYaml .Values.zones | nindent 6 }}

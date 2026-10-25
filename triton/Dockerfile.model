@@ -1,0 +1,6 @@
+# The model repository as an OCI image: the Triton pod copies it into a shared volume with an
+# init container, so models are versioned, scanned and pulled from ECR like the apps.
+# Build after triton/scripts/export_model.py:  docker build -f triton/Dockerfile.model triton
+FROM busybox:1.37
+COPY model_repository /models
+USER 65534:65534

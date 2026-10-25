@@ -1,0 +1,107 @@
+{{- $cameras := list }}
+{{- range $name, $url := .Values.cameras }}
+{{- $cameras = append $cameras (printf "%s=%s" $name $url) }}
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}
+  labels:
+    {{- include "detector.labels" . | nindent 4 }}
+spec:
+  # one reader per camera stream: never run an old and a new detector side by side
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "detector.selector" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "detector.labels" . | nindent 8 }}
+      annotations:
+        checksum/zones: {{ include (print $.Template.BasePath "/configmap-zones.yaml") . | sha256sum }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: detector
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: MINIEYES_SITE
+              value: {{ .Values.site | quote }}
+            - name: MINIEYES_CAMERAS
+              value: {{ join "," $cameras | quote }}
+            - name: MINIEYES_ZONES_FILE
+              value: /config/zones.yaml
+            - name: MINIEYES_TRITON_URL
+              value: {{ .Values.triton.url | quote }}
+            - name: MINIEYES_MODEL
+              value: {{ .Values.triton.model | quote }}
+            - name: MINIEYES_EVENT_API_URL
+              value: {{ .Values.eventApi.url | quote }}
+            - name: MINIEYES_API_KEY_FILE
+              value: /var/run/secrets/minieyes/api-key
+            - name: MINIEYES_DEBOUNCE_FRAMES
+              value: {{ .Values.debounceFrames | quote }}
+            - name: MINIEYES_COOLDOWN_SECONDS
+              value: {{ .Values.cooldownSeconds | quote }}
+            - name: MINIEYES_LOG_LEVEL
+              value: {{ .Values.logLevel | quote }}
+          ports:
+            - name: http
+              containerPort: 8080
+          startupProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 5
+            failureThreshold: 24  # up to 2 minutes for a cold start
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: zones
+              mountPath: /config
+              readOnly: true
+            - name: api-key
+              mountPath: /var/run/secrets/minieyes
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: zones
+          configMap:
+            name: {{ .Release.Name }}-zones
+        - name: api-key
+          secret:
+            secretName: {{ .Values.eventApi.apiKeySecret.name }}
+            items:
+              - key: {{ .Values.eventApi.apiKeySecret.key }}
+                path: api-key
+        - name: tmp
+          emptyDir: {}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

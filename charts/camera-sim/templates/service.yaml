@@ -1,0 +1,15 @@
+# Fixed name so the detector's default camera URL rtsp://camera-sim:8554/cam1 resolves.
+apiVersion: v1
+kind: Service
+metadata:
+  name: camera-sim
+  labels:
+    app.kubernetes.io/name: camera-sim
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/part-of: minieyes
+spec:
+  selector:
+    app.kubernetes.io/name: camera-sim
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  ports:
+    - { name: rtsp, port: 8554, targetPort: rtsp }

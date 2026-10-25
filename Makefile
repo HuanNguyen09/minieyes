@@ -13,8 +13,8 @@ fmt:
 	uv run ruff check --fix .
 	uv run ruff format .
 
-test-helm:
-	@echo "TODO: helm lint + helm-unittest (#19)"
+test-helm:  # needs helm, the helm-unittest binary (or plugin) and kubeconform on PATH
+	bash scripts/check-charts.sh
 
 test-tf:
 	@echo "TODO: terraform fmt/validate/test (#21)"

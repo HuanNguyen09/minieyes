@@ -1,0 +1,6 @@
+apiVersion: v2
+name: triton
+description: NVIDIA Triton serving the MiniEyes YOLOv8n model on CPU at the edge
+type: application
+version: 0.1.0
+appVersion: "26.08"
