@@ -1,0 +1,3 @@
+# Throwaway local demo key (demo-site-01-key) in compose.yaml and README; not a credential.
+a02e4ea8dd5bcc7b2595cda4d715b4a08241c195:README.md:curl-auth-header:129
+a02e4ea8dd5bcc7b2595cda4d715b4a08241c195:compose.yaml:curl-auth-header:6
