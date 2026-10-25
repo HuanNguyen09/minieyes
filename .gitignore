@@ -39,3 +39,6 @@ Thumbs.db
 .coverage
 .coverage.*
 htmlcov/
+
+# Claude Code local state (agent worktrees)
+.claude/
