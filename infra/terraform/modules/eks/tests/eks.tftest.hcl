@@ -183,3 +183,13 @@ run "disallowed_instance_type_is_rejected" {
 
   expect_failures = [var.node_instance_types]
 }
+
+# Without the VPC CNI network policy agent, EKS accepts NetworkPolicy objects but enforces none.
+run "vpc_cni_enforces_network_policies" {
+  command = plan
+
+  assert {
+    condition     = jsondecode(aws_eks_addon.before_nodes["vpc-cni"].configuration_values).enableNetworkPolicy == "true"
+    error_message = "vpc-cni must run with enableNetworkPolicy=true or the charts' NetworkPolicies are ignored."
+  }
+}

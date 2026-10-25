@@ -24,6 +24,9 @@ resource "aws_eks_addon" "before_nodes" {
   addon_version               = data.aws_eks_addon_version.this[each.key].version
   resolve_conflicts_on_create = "OVERWRITE"
   resolve_conflicts_on_update = "OVERWRITE"
+
+  # The CNI's network policy agent is what enforces the charts' NetworkPolicies (#37).
+  configuration_values = each.key == "vpc-cni" ? jsonencode({ enableNetworkPolicy = "true" }) : null
 }
 
 resource "aws_eks_addon" "after_nodes" {
