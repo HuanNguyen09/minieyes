@@ -22,7 +22,10 @@ spec:
         description: 'minieyes_camera_up has been 0 for more than 1 minute: the detector cannot read the RTSP stream of {{ $labels.camera }}.'
         runbook_url: https://github.com/HuanNguyen09/minieyes/blob/main/docs/runbooks/camera-down.md
     - alert: DetectorDown
-      expr: max by (site) (up{job="detector"}) == 0
+      expr: |
+        (max by (site) (up{job="detector"}) == 0)
+        or
+        (group by (site) (up{job="node"}) unless group by (site) (up{job="detector"}))
       for: 2m
       labels:
         severity: critical

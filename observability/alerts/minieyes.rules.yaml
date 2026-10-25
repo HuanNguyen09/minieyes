@@ -17,8 +17,14 @@ groups:
           runbook_url: "https://github.com/HuanNguyen09/minieyes/blob/main/docs/runbooks/camera-down.md"
 
       # A detector that cannot start exposes no minieyes_* series, so CameraDown cannot fire.
+      # Second branch: a pod that never starts drops out of discovery, so its `up` disappears
+      # instead of reading 0 (drill 3); a site that still reports node metrics but has no
+      # detector target is down too.
       - alert: DetectorDown
-        expr: max by (site) (up{job="detector"}) == 0
+        expr: |
+          (max by (site) (up{job="detector"}) == 0)
+          or
+          (group by (site) (up{job="node"}) unless group by (site) (up{job="detector"}))
         for: 2m
         labels:
           severity: critical

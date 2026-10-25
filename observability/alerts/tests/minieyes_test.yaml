@@ -278,3 +278,31 @@ tests:
               summary: "Disk / on 10.20.1.234:9100 at site-01 is almost full"
               description: "Less than 15% free on / (/dev/root) for 5 minutes. Kubelet starts evicting pods at 10% (DiskPressure)."
               runbook_url: "https://github.com/HuanNguyen09/minieyes/blob/main/docs/runbooks/disk-will-fill-in-24h.md"
+
+  # Drill 3 follow-up: a detector pod that never starts drops out of discovery, so its `up` series
+  # disappears instead of reading 0. The site still reports node metrics: that difference fires.
+  - name: DetectorDown also fires when the detector target is gone while the site still reports
+    interval: 1m
+    input_series:
+      - series: 'up{site="site-01", job="detector", instance="10.42.0.7:8080"}'
+        values: '1 1 1'                  # target disappears after t=2m
+      - series: 'up{site="site-01", job="node", instance="10.20.1.234:9100"}'
+        values: '1x15'
+      - series: 'up{site="site-02", job="node", instance="10.30.1.5:9100"}'
+        values: '1x15'                   # a site without a detector yet must not alert...
+      - series: 'up{site="site-02", job="detector", instance="10.43.0.7:8080"}'
+        values: '1x15'                   # ...this one has a healthy detector
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: DetectorDown
+        exp_alerts: []                   # still within the 5m staleness lookback
+      - eval_time: 12m
+        alertname: DetectorDown
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              site: site-01
+            exp_annotations:
+              summary: "Detector at site-01 is down"
+              description: "The detector at site-01 has not been scraped for 2 minutes: no camera is being watched there."
+              runbook_url: "https://github.com/HuanNguyen09/minieyes/blob/main/docs/runbooks/detector-down.md"
