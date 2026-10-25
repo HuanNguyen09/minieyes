@@ -16,8 +16,18 @@ fmt:
 test-helm:
 	@echo "TODO: helm lint + helm-unittest (#19)"
 
+# Offline only: init without backend, plan-only tests against mock providers. No AWS credentials needed.
+TF_DIRS := infra/terraform/bootstrap
+
 test-tf:
-	@echo "TODO: terraform fmt/validate/test (#21)"
+	terraform fmt -check -recursive infra/terraform
+	@set -e; for d in $(TF_DIRS); do \
+		echo "== $$d"; \
+		terraform -chdir=$$d init -backend=false -input=false >/dev/null; \
+		terraform -chdir=$$d validate; \
+		if [ -d $$d/tests ]; then terraform -chdir=$$d test; fi; \
+		tflint --chdir=$$d --config=$(CURDIR)/infra/terraform/.tflint.hcl; \
+	done
 
 test-rules:
 	promtool check rules observability/alerts/*.rules.yaml
