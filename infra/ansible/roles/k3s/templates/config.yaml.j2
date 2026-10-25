@@ -1,0 +1,12 @@
+# {{ ansible_managed }}
+# Same as `k3s server --disable traefik --disable servicelb ...`
+write-kubeconfig-mode: "{{ k3s_write_kubeconfig_mode }}"
+disable:
+{% for component in k3s_disable %}
+  - {{ component }}
+{% endfor %}
+image-credential-provider-bin-dir: {{ k3s_credential_provider_bin_dir }}
+image-credential-provider-config: {{ k3s_credential_provider_config }}
+{% if k3s_extra_config %}
+{{ k3s_extra_config | to_nice_yaml(indent=2) }}
+{% endif %}

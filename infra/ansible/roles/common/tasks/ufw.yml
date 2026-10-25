@@ -1,0 +1,41 @@
+---
+- name: Require the admin CIDR before touching the firewall
+  ansible.builtin.assert:
+    that:
+      - common_admin_cidr | length > 0
+      - "'/' in common_admin_cidr"
+    fail_msg: >-
+      common_admin_cidr is not set. Export ADMIN_CIDR (same value as the
+      Terraform admin_cidr variable), e.g. 203.0.113.10/32.
+    quiet: true
+
+# Allow rules go in before the firewall is enabled so the current SSH
+# session is never cut.
+- name: Allow SSH from the admin CIDR only
+  community.general.ufw:
+    rule: allow
+    proto: tcp
+    from_ip: "{{ common_admin_cidr }}"
+    to_port: "{{ common_ssh_port | string }}"
+    comment: ssh from admin cidr
+
+- name: Allow k3s pod and service networks to reach the node
+  community.general.ufw:
+    rule: allow
+    from_ip: "{{ item }}"
+    comment: k3s cluster network
+  loop: "{{ common_ufw_cluster_cidrs }}"
+
+- name: Deny incoming by default
+  community.general.ufw:
+    default: deny
+    direction: incoming
+
+- name: Allow outgoing by default
+  community.general.ufw:
+    default: allow
+    direction: outgoing
+
+- name: Enable ufw
+  community.general.ufw:
+    state: enabled

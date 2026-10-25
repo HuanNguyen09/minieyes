@@ -1,0 +1,16 @@
+---
+galaxy_info:
+  role_name: argocd
+  namespace: minieyes
+  author: HuanNguyen09
+  description: Argo CD on k3s pulling the site's App of Apps from the GitOps repo
+  license: MIT
+  min_ansible_version: "2.17"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - noble
+  galaxy_tags:
+    - argocd
+    - gitops
+dependencies: []

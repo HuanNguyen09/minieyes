@@ -1,0 +1,4 @@
+// {{ ansible_managed }}
+Unattended-Upgrade::Automatic-Reboot "{{ common_unattended_upgrades_reboot | bool | lower }}";
+Unattended-Upgrade::Remove-Unused-Dependencies "true";
+Unattended-Upgrade::Remove-Unused-Kernel-Packages "true";

@@ -1,0 +1,29 @@
+---
+# k3s stable channel at the time of writing. Bumping the version means
+# updating both checksums (release asset sha256sum-<arch>.txt).
+k3s_version: "v1.36.5+k3s1"
+k3s_checksums:
+  amd64: d73847bcd3c5fccef0115b372e2f9a91f3032dc84bbf71518a4617565294d313
+  arm64: 135e34cb9e8a1cfae3cb55577789e93501efe7edc080a8b2630458a85b07721e
+
+# Components we replace or do not need on a single edge node.
+k3s_disable:
+  - traefik
+  - servicelb
+
+k3s_write_kubeconfig_mode: "0600"
+k3s_extra_config: {}
+
+# ecr-credential-provider (kubernetes/cloud-provider-aws), published on
+# artifacts.k8s.io. The kubelet runs it to get ECR tokens from the instance
+# profile, so private ECR pulls keep working past the 12 h token lifetime.
+k3s_ecr_credential_provider_version: "v1.37.0"
+k3s_ecr_credential_provider_checksums:
+  amd64: 842e0fd8159f5ed8df2f38e6521e1e4f0a1ee80cf1e1ac119bbf20bf9c20681c
+  arm64: dd4748d167b0167cd4a66779dbbe4964e17a29a076aaa3d2b63cfc36ae84b52c
+k3s_credential_provider_bin_dir: /var/lib/rancher/credentialprovider/bin
+k3s_credential_provider_config: /var/lib/rancher/credentialprovider/config.yaml
+k3s_ecr_match_images:
+  - "*.dkr.ecr.*.amazonaws.com"
+  - "*.dkr.ecr.*.amazonaws.com.cn"
+k3s_ecr_cache_duration: "12h"

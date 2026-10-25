@@ -1,0 +1,30 @@
+---
+# Base packages for every edge node.
+common_packages:
+  - ca-certificates
+  - curl
+  - openssh-server
+  - unattended-upgrades
+  - ufw
+
+# Apply pending package upgrades ("apt-get upgrade") on each run.
+common_apt_upgrade: true
+common_apt_cache_valid_time: 3600
+
+# unattended-upgrades: security updates daily, never reboot on its own
+# (a reboot of the single edge node is a planned operation).
+common_unattended_upgrades_reboot: false
+
+# SSH hardening (drop-in under /etc/ssh/sshd_config.d).
+common_ssh_port: 22
+common_ssh_max_auth_tries: 3
+
+# Firewall. Disabled in Molecule (ufw needs a real kernel netfilter).
+common_ufw_enabled: true
+# CIDR allowed to reach SSH. Must be set (no default on purpose).
+common_admin_cidr: ""
+# k3s pod and service CIDRs: pods must reach the node (API server via the
+# kubernetes service, node_exporter scraped by the in-cluster agent).
+common_ufw_cluster_cidrs:
+  - 10.42.0.0/16
+  - 10.43.0.0/16

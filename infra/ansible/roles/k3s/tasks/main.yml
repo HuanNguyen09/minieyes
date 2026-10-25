@@ -1,0 +1,95 @@
+---
+# k3s is installed from the pinned release binary plus our own systemd unit
+# (equivalent to get.k3s.io) so every file is checksummed and a second run
+# reports no changes.
+- name: Map the CPU architecture to the release naming
+  ansible.builtin.set_fact:
+    k3s_arch: "{{ {'x86_64': 'amd64', 'aarch64': 'arm64'}[ansible_facts['architecture']] }}"
+
+- name: Create k3s and credential provider directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - /etc/rancher/k3s
+    - "{{ k3s_credential_provider_bin_dir }}"
+
+- name: Download ecr-credential-provider (checksum pinned)
+  ansible.builtin.get_url:
+    url: "https://artifacts.k8s.io/binaries/cloud-provider-aws/{{ k3s_ecr_credential_provider_version }}/linux/{{ k3s_arch }}/ecr-credential-provider-linux-{{ k3s_arch }}"
+    dest: "{{ k3s_credential_provider_bin_dir }}/ecr-credential-provider"
+    checksum: "sha256:{{ k3s_ecr_credential_provider_checksums[k3s_arch] }}"
+    owner: root
+    group: root
+    mode: "0755"
+  notify: Restart k3s
+
+- name: Write the kubelet CredentialProviderConfig
+  ansible.builtin.template:
+    src: credential-provider-config.yaml.j2
+    dest: "{{ k3s_credential_provider_config }}"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart k3s
+
+- name: Write the k3s configuration
+  ansible.builtin.template:
+    src: config.yaml.j2
+    dest: /etc/rancher/k3s/config.yaml
+    owner: root
+    group: root
+    mode: "0600"
+  notify: Restart k3s
+
+- name: Download the k3s binary (checksum pinned)
+  ansible.builtin.get_url:
+    url: "https://github.com/k3s-io/k3s/releases/download/{{ k3s_version | urlencode }}/k3s{{ '' if k3s_arch == 'amd64' else '-' ~ k3s_arch }}"
+    dest: /usr/local/bin/k3s
+    checksum: "sha256:{{ k3s_checksums[k3s_arch] }}"
+    owner: root
+    group: root
+    mode: "0755"
+  notify: Restart k3s
+
+- name: Link kubectl, crictl and ctr to the k3s binary
+  ansible.builtin.file:
+    src: /usr/local/bin/k3s
+    dest: "/usr/local/bin/{{ item }}"
+    state: link
+  loop:
+    - kubectl
+    - crictl
+    - ctr
+
+- name: Install the k3s systemd unit
+  ansible.builtin.template:
+    src: k3s.service.j2
+    dest: /etc/systemd/system/k3s.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart k3s
+
+- name: Enable and start k3s
+  ansible.builtin.systemd_service:
+    name: k3s
+    enabled: true
+    state: started
+    daemon_reload: true
+
+- name: Apply pending k3s restarts before waiting for the node
+  ansible.builtin.meta: flush_handlers
+
+- name: Wait for the node to be Ready
+  ansible.builtin.command: >-
+    /usr/local/bin/k3s kubectl wait --for=condition=Ready
+    node/{{ ansible_facts['nodename'] }} --timeout=10s
+  register: k3s_node_ready
+  until: k3s_node_ready.rc == 0
+  retries: 30
+  delay: 10
+  changed_when: false
