@@ -1,0 +1,28 @@
+---
+# Argo CD is installed by k3s's built-in Helm controller from a HelmChart
+# manifest, pinned to this argo-helm chart version.
+argocd_chart_repo: https://argoproj.github.io/argo-helm
+argocd_chart_version: "10.11.1"
+argocd_namespace: argocd
+argocd_k3s_manifests_dir: /var/lib/rancher/k3s/server/manifests
+argocd_kubectl: /usr/local/bin/k3s kubectl
+
+# Edge-sized values: no SSO, no notifications, single replicas.
+argocd_values:
+  dex:
+    enabled: false
+  notifications:
+    enabled: false
+  configs:
+    params:
+      server.insecure: true
+
+# GitOps source. The root App of Apps syncs <repo>/<site path>.
+argocd_gitops_repo_url: https://github.com/HuanNguyen09/minieyes-gitops.git
+argocd_gitops_revision: main
+argocd_site_path: sites/site-01
+argocd_root_app_name: root
+
+# Private repo: read-only SSH deploy key from Ansible Vault.
+argocd_gitops_repo_private: false
+argocd_gitops_deploy_key: ""

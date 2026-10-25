@@ -1,0 +1,10 @@
+---
+- name: Packages and automatic security updates
+  ansible.builtin.import_tasks: packages.yml
+
+- name: SSH hardening
+  ansible.builtin.import_tasks: ssh.yml
+
+- name: Host firewall
+  ansible.builtin.import_tasks: ufw.yml
+  when: common_ufw_enabled | bool

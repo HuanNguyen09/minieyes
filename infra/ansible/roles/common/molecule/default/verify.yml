@@ -1,0 +1,37 @@
+---
+- name: Verify common role
+  hosts: all
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Read the effective sshd configuration
+      ansible.builtin.command: /usr/sbin/sshd -T
+      register: common_verify_sshd
+      changed_when: false
+
+    - name: SSH root login and password authentication are disabled
+      ansible.builtin.assert:
+        that:
+          - "'permitrootlogin no' in common_verify_sshd.stdout_lines"
+          - "'passwordauthentication no' in common_verify_sshd.stdout_lines"
+          - "'kbdinteractiveauthentication no' in common_verify_sshd.stdout_lines"
+          - "'pubkeyauthentication yes' in common_verify_sshd.stdout_lines"
+
+    - name: Read service state
+      ansible.builtin.service_facts:
+
+    - name: SSH daemon and unattended-upgrades are running
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.services['ssh.service'].state == 'running'
+          - ansible_facts.services['unattended-upgrades.service'].state == 'running'
+
+    - name: Read the apt periodic configuration
+      ansible.builtin.command: apt-config dump APT::Periodic
+      register: common_verify_apt
+      changed_when: false
+
+    - name: Unattended upgrades are enabled
+      ansible.builtin.assert:
+        that:
+          - "'APT::Periodic::Unattended-Upgrade \"1\";' in common_verify_apt.stdout_lines"

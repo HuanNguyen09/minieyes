@@ -1,0 +1,60 @@
+---
+- name: Require a deploy key when the GitOps repo is private
+  ansible.builtin.assert:
+    that:
+      - argocd_gitops_deploy_key | length > 0
+      - argocd_gitops_repo_url is match('^(git@|ssh://)')
+    fail_msg: >-
+      gitops_repo_private is true: set vault_gitops_deploy_key in an Ansible
+      Vault file and use the SSH URL of the GitOps repo.
+    quiet: true
+  when: argocd_gitops_repo_private | bool
+
+# k3s applies every manifest in this directory and re-applies on change.
+- name: Install Argo CD through the k3s Helm controller
+  ansible.builtin.template:
+    src: argocd-helmchart.yaml.j2
+    dest: "{{ argocd_k3s_manifests_dir }}/argocd.yaml"
+    owner: root
+    group: root
+    mode: "0600"
+
+- name: Wait for the Argo CD Application CRD
+  ansible.builtin.command: >-
+    {{ argocd_kubectl }} wait --for=condition=Established
+    crd/applications.argoproj.io --timeout=10s
+  register: argocd_crd
+  until: argocd_crd.rc == 0
+  retries: 60
+  delay: 10
+  changed_when: false
+
+- name: Wait for the Argo CD repo server and application controller
+  ansible.builtin.command: >-
+    {{ argocd_kubectl }} -n {{ argocd_namespace }} rollout status
+    {{ item }} --timeout=30s
+  loop:
+    - deployment/argocd-repo-server
+    - statefulset/argocd-application-controller
+  register: argocd_rollout
+  until: argocd_rollout.rc == 0
+  retries: 30
+  delay: 10
+  changed_when: false
+
+# Applied with kubectl from stdin so a deploy key never lands on disk.
+- name: Register the GitOps repository
+  ansible.builtin.command:
+    cmd: "{{ argocd_kubectl }} apply -f -"
+    stdin: "{{ lookup('ansible.builtin.template', 'repo-secret.yaml.j2') }}"
+  register: argocd_repo_secret
+  changed_when: "'unchanged' not in argocd_repo_secret.stdout"
+  no_log: "{{ argocd_gitops_repo_private | bool }}"
+
+- name: Apply the root App of Apps for this site
+  ansible.builtin.template:
+    src: root-app.yaml.j2
+    dest: "{{ argocd_k3s_manifests_dir }}/argocd-root-app.yaml"
+    owner: root
+    group: root
+    mode: "0600"

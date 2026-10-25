@@ -1,0 +1,18 @@
+---
+# Site identity: the Argo CD root app syncs sites/<site_name> of the GitOps repo.
+site_name: site-01
+
+# GitOps repository. Public by default; set gitops_repo_private: true and
+# provide vault_gitops_deploy_key in an Ansible Vault file (vault.yml in this
+# directory) to use a read-only SSH deploy key instead.
+gitops_repo_private: false
+gitops_repo_https_url: https://github.com/HuanNguyen09/minieyes-gitops.git
+gitops_repo_ssh_url: git@github.com:HuanNguyen09/minieyes-gitops.git
+
+# Admin CIDR allowed to SSH in (same value as the Terraform admin_cidr variable).
+common_admin_cidr: "{{ lookup('ansible.builtin.env', 'ADMIN_CIDR') }}"
+
+argocd_site_path: "sites/{{ site_name }}"
+argocd_gitops_repo_private: "{{ gitops_repo_private }}"
+argocd_gitops_repo_url: "{{ gitops_repo_ssh_url if gitops_repo_private | bool else gitops_repo_https_url }}"
+argocd_gitops_deploy_key: "{{ vault_gitops_deploy_key | default('') }}"

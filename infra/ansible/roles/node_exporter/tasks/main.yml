@@ -1,0 +1,65 @@
+---
+- name: Map the CPU architecture to the release naming
+  ansible.builtin.set_fact:
+    node_exporter_arch: "{{ {'x86_64': 'amd64', 'aarch64': 'arm64'}[ansible_facts['architecture']] }}"
+
+- name: Set release names
+  ansible.builtin.set_fact:
+    node_exporter_release: "node_exporter-{{ node_exporter_version }}.linux-{{ node_exporter_arch }}"
+
+- name: Create the node_exporter system user
+  ansible.builtin.user:
+    name: "{{ node_exporter_user }}"
+    system: true
+    shell: /usr/sbin/nologin
+    create_home: false
+
+- name: Create the install directory
+  ansible.builtin.file:
+    path: "{{ node_exporter_install_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Download node_exporter (checksum pinned)
+  ansible.builtin.get_url:
+    url: "https://github.com/prometheus/node_exporter/releases/download/v{{ node_exporter_version }}/{{ node_exporter_release }}.tar.gz"
+    dest: "{{ node_exporter_install_dir }}/{{ node_exporter_release }}.tar.gz"
+    checksum: "sha256:{{ node_exporter_checksums[node_exporter_arch] }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Unpack node_exporter
+  ansible.builtin.unarchive:
+    src: "{{ node_exporter_install_dir }}/{{ node_exporter_release }}.tar.gz"
+    dest: "{{ node_exporter_install_dir }}"
+    remote_src: true
+    creates: "{{ node_exporter_install_dir }}/{{ node_exporter_release }}/node_exporter"
+
+- name: Install the node_exporter binary
+  ansible.builtin.copy:
+    src: "{{ node_exporter_install_dir }}/{{ node_exporter_release }}/node_exporter"
+    dest: "{{ node_exporter_binary }}"
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0755"
+  notify: Restart node_exporter
+
+- name: Install the systemd unit
+  ansible.builtin.template:
+    src: node_exporter.service.j2
+    dest: /etc/systemd/system/node_exporter.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart node_exporter
+
+- name: Enable and start node_exporter
+  ansible.builtin.systemd_service:
+    name: node_exporter
+    enabled: true
+    state: started
+    daemon_reload: true

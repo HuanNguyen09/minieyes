@@ -1,0 +1,158 @@
+---
+# Checks against the real edge EC2 what Molecule cannot cover in a container
+# (ufw, k3s, ecr-credential-provider, Argo CD). Read-only except for a
+# short-lived test pod in the default namespace.
+#
+#   export EDGE_HOST=... ADMIN_CIDR=...
+#   export VERIFY_ECR_IMAGE=<account>.dkr.ecr.<region>.amazonaws.com/minieyes/detector:<tag>
+#   ansible-playbook verify.yml
+#
+# Run it again 12 h or more after site.yml to prove pulls outlive an ECR token.
+- name: Verify MiniEyes edge node
+  hosts: edge
+  become: true
+  vars:
+    verify_kubectl: /usr/local/bin/k3s kubectl
+    verify_ecr_image: "{{ lookup('ansible.builtin.env', 'VERIFY_ECR_IMAGE') }}"
+    verify_argocd_namespace: argocd
+    verify_root_app: root
+  pre_tasks:
+    - name: Load pinned versions and firewall settings from the role defaults
+      ansible.builtin.include_vars:
+        file: "{{ item }}"
+      loop:
+        - roles/k3s/defaults/main.yml
+        - roles/common/defaults/main.yml
+
+  tasks:
+    # --- ufw ---------------------------------------------------------------
+    - name: Read ufw status
+      ansible.builtin.command: ufw status verbose
+      register: verify_ufw
+      changed_when: false
+
+    - name: Collect ufw allow rules
+      ansible.builtin.set_fact:
+        verify_ufw_rules: "{{ verify_ufw.stdout_lines | select('search', 'ALLOW IN') | list }}"
+        verify_ufw_cluster_pattern: "{{ common_ufw_cluster_cidrs | map('regex_escape') | join('|') }}"
+
+    - name: Ufw is active, denies incoming and allows only SSH from outside the cluster
+      ansible.builtin.assert:
+        that:
+          - "'Status: active' in verify_ufw.stdout"
+          - "'Default: deny (incoming)' in verify_ufw.stdout"
+          - verify_ufw_rules | select('search', '^22/tcp\\s+ALLOW IN\\s+' ~ (common_admin_cidr | regex_escape)) | list | length == 1
+          - >-
+            verify_ufw_rules
+            | reject('search', '^22/tcp\\s+ALLOW IN\\s+' ~ (common_admin_cidr | regex_escape))
+            | reject('search', '^Anywhere\\s+ALLOW IN\\s+(' ~ verify_ufw_cluster_pattern ~ ')')
+            | list | length == 0
+        fail_msg: "Unexpected ufw state:\n{{ verify_ufw.stdout }}"
+
+    # --- k3s ---------------------------------------------------------------
+    - name: Read node versions
+      ansible.builtin.command: >-
+        {{ verify_kubectl }} get nodes
+        -o jsonpath={.items[*].status.nodeInfo.kubeletVersion}
+      register: verify_kubelet_version
+      changed_when: false
+
+    - name: List pods in all namespaces
+      ansible.builtin.command: "{{ verify_kubectl }} get pods -A -o name"
+      register: verify_pods
+      changed_when: false
+
+    - name: List k3s HelmCharts
+      ansible.builtin.command: "{{ verify_kubectl }} -n kube-system get helmcharts.helm.cattle.io -o name"
+      register: verify_helmcharts
+      changed_when: false
+
+    - name: K3s runs the pinned version with Traefik and servicelb disabled
+      ansible.builtin.assert:
+        that:
+          - verify_kubelet_version.stdout == k3s_version
+          - verify_pods.stdout_lines | select('search', 'traefik|svclb-') | list | length == 0
+          - "'helmchart.helm.cattle.io/traefik' not in verify_helmcharts.stdout_lines"
+
+    # --- ecr-credential-provider ---------------------------------------------
+    - name: Read the k3s configuration
+      ansible.builtin.slurp:
+        src: /etc/rancher/k3s/config.yaml
+      register: verify_k3s_config
+
+    - name: Stat the ecr-credential-provider binary
+      ansible.builtin.stat:
+        path: "{{ k3s_credential_provider_bin_dir }}/ecr-credential-provider"
+      register: verify_ecr_binary
+
+    - name: Kubelet is configured to use ecr-credential-provider
+      ansible.builtin.assert:
+        that:
+          - verify_ecr_binary.stat.exists
+          - verify_ecr_binary.stat.executable
+          - "('image-credential-provider-config: ' ~ k3s_credential_provider_config) in (verify_k3s_config.content | b64decode)"
+          - "('image-credential-provider-bin-dir: ' ~ k3s_credential_provider_bin_dir) in (verify_k3s_config.content | b64decode)"
+
+    - name: Pull a private ECR image without imagePullSecrets
+      when: verify_ecr_image | length > 0
+      block:
+        - name: Start a test pod that always pulls the private ECR image
+          ansible.builtin.command:
+            cmd: "{{ verify_kubectl }} apply -f -"
+            stdin: |
+              apiVersion: v1
+              kind: Pod
+              metadata:
+                name: verify-ecr-pull
+                namespace: default
+              spec:
+                restartPolicy: Never
+                containers:
+                  - name: probe
+                    image: {{ verify_ecr_image }}
+                    imagePullPolicy: Always
+                    command: ["sleep", "300"]
+          changed_when: true
+
+        - name: Wait until the test pod is Running
+          ansible.builtin.command: >-
+            {{ verify_kubectl }} -n default get pod verify-ecr-pull
+            -o jsonpath={.status.phase}
+          register: verify_ecr_phase
+          until: verify_ecr_phase.stdout == 'Running'
+          retries: 30
+          delay: 10
+          changed_when: false
+      always:
+        - name: Delete the test pod
+          ansible.builtin.command: >-
+            {{ verify_kubectl }} -n default delete pod verify-ecr-pull
+            --ignore-not-found --wait=false
+          changed_when: true
+
+    - name: Warn when the ECR pull check was skipped
+      ansible.builtin.debug:
+        msg: VERIFY_ECR_IMAGE is not set; the private ECR pull check was skipped.
+      when: verify_ecr_image | length == 0
+
+    # --- Argo CD -------------------------------------------------------------
+    - name: Wait for the root application to be Healthy
+      ansible.builtin.command: >-
+        {{ verify_kubectl }} -n {{ verify_argocd_namespace }}
+        get applications.argoproj.io {{ verify_root_app }} -o json
+      register: verify_root_app_json
+      until: >-
+        verify_root_app_json.rc == 0
+        and (verify_root_app_json.stdout | from_json).status.health.status | default('') == 'Healthy'
+      retries: 30
+      delay: 10
+      changed_when: false
+
+    - name: Argo CD root app is Healthy and points at this site's path
+      vars:
+        verify_app: "{{ verify_root_app_json.stdout | from_json }}"
+      ansible.builtin.assert:
+        that:
+          - verify_app.status.health.status == 'Healthy'
+          - verify_app.spec.source.path == argocd_site_path
+          - verify_app.spec.source.repoURL == argocd_gitops_repo_url
