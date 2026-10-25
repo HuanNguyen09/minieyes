@@ -1,0 +1,26 @@
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: {{ .Values.acme.issuerName }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"  # after cert-manager (wave -1) installed its CRDs
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  acme:
+    email: {{ required "acme.email is required for Let's Encrypt" .Values.acme.email | quote }}
+    server: {{ .Values.acme.server }}
+    privateKeySecretRef:
+      name: {{ .Values.acme.issuerName }}-account-key
+    solvers:
+      {{- if eq .Values.dns.provider "cloudflare" }}
+      - dns01:
+          cloudflare:
+            apiTokenSecretRef:
+              {{- toYaml .Values.dns.cloudflare.apiTokenSecret | nindent 14 }}
+      {{- else if eq .Values.dns.provider "" }}
+      - http01:
+          ingress:
+            ingressClassName: traefik
+      {{- else }}
+      {{- fail (printf "dns.provider %q is not supported (use \"\" or \"cloudflare\")" .Values.dns.provider) }}
+      {{- end }}

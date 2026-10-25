@@ -100,3 +100,14 @@ tests:
       - equal:
           path: spec.replicas
           value: 1
+
+  # observability/README.md: Alloy discovers the detector by a container port named "metrics"
+  - it: names its HTTP port "metrics" for Alloy discovery
+    template: deployment.yaml
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].ports[0].name
+          value: metrics
+      - equal:
+          path: spec.template.spec.containers[0].ports[0].containerPort
+          value: 8080

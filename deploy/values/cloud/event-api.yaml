@@ -1,10 +1,10 @@
 # Cloud (EKS). Image comes from ECR; the tag is bumped by CI in the GitOps repo.
+# The public events.<base_domain> Ingress is owned by charts/platform (#40).
 image:
   repository: 123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/minieyes/event-api
   tag: 0000000
 ingress:
-  enabled: true
-  host: events.203-0-113-10.sslip.io
+  enabled: false
 autoscaling:
   enabled: true
   minReplicas: 2

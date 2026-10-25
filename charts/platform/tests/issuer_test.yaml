@@ -1,0 +1,38 @@
+suite: platform certificates
+templates:
+  - clusterissuer.yaml
+release:
+  name: platform
+  namespace: argocd
+set:
+  baseDomain: 203-0-113-10.sslip.io
+  acme:
+    email: ops@example.com
+tests:
+  - it: uses HTTP-01 through Traefik when no DNS provider is set
+    asserts:
+      - equal:
+          path: spec.acme.solvers[0].http01.ingress.ingressClassName
+          value: traefik
+      - notExists:
+          path: spec.acme.solvers[0].dns01
+
+  - it: uses Cloudflare DNS-01 with a token from a Secret when dns.provider=cloudflare
+    set:
+      dns:
+        provider: cloudflare
+    asserts:
+      - equal:
+          path: spec.acme.solvers[0].dns01.cloudflare.apiTokenSecretRef
+          value: { name: cloudflare-api-token, key: api-token }
+      - notExists:
+          path: spec.acme.solvers[0].http01
+
+  - it: is applied after cert-manager has installed its CRDs
+    asserts:
+      - equal:
+          path: metadata.annotations["argocd.argoproj.io/sync-wave"]
+          value: "1"
+      - equal:
+          path: metadata.annotations["argocd.argoproj.io/sync-options"]
+          value: SkipDryRunOnMissingResource=true

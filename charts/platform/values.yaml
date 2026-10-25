@@ -1,0 +1,58 @@
+# Cloud ingress layer (#40). Rendered by Argo CD on EKS from the GitOps repo.
+
+# Required. Default plan: "<nlb-ip-with-dashes>.sslip.io" (HTTP-01). With a Cloudflare zone,
+# set the zone here and dns.provider=cloudflare (DNS-01).
+baseDomain: ""
+
+acme:
+  email: ""
+  server: https://acme-v02.api.letsencrypt.org/directory
+  issuerName: letsencrypt
+
+dns:
+  provider: ""   # "" (HTTP-01) or "cloudflare" (DNS-01)
+  cloudflare:
+    apiTokenSecret: { name: cloudflare-api-token, key: api-token }  # in cert-manager namespace
+
+traefik:
+  chartVersion: 41.6.1
+  namespace: traefik
+  # edge EIP /32 and the admin CIDR; never 0.0.0.0/0
+  sourceRanges: []
+
+certManager:
+  chartVersion: v1.21.2
+  namespace: cert-manager
+
+# htpasswd Secret in the monitoring namespace (key "users"), created out of band (#36)
+pushBasicAuthSecret: push-basic-auth
+
+routes:
+  events:
+    namespace: minieyes
+    service: event-api
+    port: 8000
+    path: /
+    pathType: Prefix
+    basicAuth: false
+  metrics:
+    namespace: monitoring
+    service: kube-prometheus-stack-prometheus
+    port: 9090
+    path: /api/v1/write
+    pathType: Exact
+    basicAuth: true
+  logs:
+    namespace: monitoring
+    service: loki
+    port: 3100
+    path: /loki/api/v1/push
+    pathType: Exact
+    basicAuth: true
+  grafana:
+    namespace: monitoring
+    service: kube-prometheus-stack-grafana
+    port: 80
+    path: /
+    pathType: Prefix
+    basicAuth: false   # Grafana has its own login

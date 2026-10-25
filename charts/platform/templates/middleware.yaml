@@ -1,0 +1,13 @@
+# Basic auth for the edge push endpoints (metrics./logs.). Users come from an htpasswd Secret.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: push-basic-auth
+  namespace: {{ .Values.routes.metrics.namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"  # after Traefik's CRDs
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true
+spec:
+  basicAuth:
+    secret: {{ .Values.pushBasicAuthSecret }}
+    removeHeader: true

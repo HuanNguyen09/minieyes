@@ -1,0 +1,76 @@
+{{- range .Values.traefik.sourceRanges }}
+{{- if eq . "0.0.0.0/0" }}
+{{- fail "traefik.sourceRanges must not include 0.0.0.0/0: only the edge EIP and the admin CIDR" }}
+{{- end }}
+{{- end }}
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cert-manager
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  project: default
+  source:
+    repoURL: https://charts.jetstack.io
+    chart: cert-manager
+    targetRevision: {{ .Values.certManager.chartVersion }}
+    helm:
+      valuesObject:
+        crds:
+          enabled: true
+        prometheus:
+          servicemonitor:
+            enabled: true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: {{ .Values.certManager.namespace }}
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [CreateNamespace=true, ServerSideApply=true]
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: traefik
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  project: default
+  source:
+    repoURL: https://traefik.github.io/charts
+    chart: traefik
+    targetRevision: {{ .Values.traefik.chartVersion }}
+    helm:
+      valuesObject:
+        ingressClass:
+          enabled: true
+          isDefaultClass: true
+        providers:
+          kubernetesCRD: { enabled: true }
+          kubernetesIngress: { enabled: true }
+        ports:
+          web:
+            # HTTP only serves ACME challenges and redirects everything else
+            redirections:
+              entryPoint: { to: websecure, scheme: https, permanent: true }
+        service:
+          annotations:
+            service.beta.kubernetes.io/aws-load-balancer-type: nlb
+            service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
+          spec:
+            externalTrafficPolicy: Local  # keep client IPs so the source ranges apply
+            loadBalancerSourceRanges:
+              {{- toYaml .Values.traefik.sourceRanges | nindent 14 }}
+        metrics:
+          prometheus:
+            serviceMonitor:
+              enabled: true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: {{ .Values.traefik.namespace }}
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [CreateNamespace=true]

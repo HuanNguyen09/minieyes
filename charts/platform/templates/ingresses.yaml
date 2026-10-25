@@ -1,0 +1,37 @@
+{{- if not .Values.baseDomain }}
+{{- fail "baseDomain is required (e.g. 203-0-113-10.sslip.io)" }}
+{{- end }}
+{{- range $name := list "events" "metrics" "logs" "grafana" }}
+{{- $r := index $.Values.routes $name }}
+{{- $host := printf "%s.%s" $name $.Values.baseDomain }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $name }}
+  namespace: {{ $r.namespace }}
+  labels:
+    app.kubernetes.io/part-of: minieyes
+    app.kubernetes.io/component: ingress
+  annotations:
+    cert-manager.io/cluster-issuer: {{ $.Values.acme.issuerName }}
+    {{- if $r.basicAuth }}
+    traefik.ingress.kubernetes.io/router.middlewares: {{ $.Values.routes.metrics.namespace }}-push-basic-auth@kubernetescrd
+    {{- end }}
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts: [{{ $host | quote }}]
+      secretName: {{ $name }}-tls
+  rules:
+    - host: {{ $host | quote }}
+      http:
+        paths:
+          - path: {{ $r.path }}
+            pathType: {{ $r.pathType }}
+            backend:
+              service:
+                name: {{ $r.service }}
+                port:
+                  number: {{ $r.port }}
+{{- end }}

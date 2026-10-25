@@ -56,18 +56,18 @@ spec:
             - name: MINIEYES_LOG_LEVEL
               value: {{ .Values.logLevel | quote }}
           ports:
-            - name: http
+            - name: metrics
               containerPort: 8080
           startupProbe:
-            httpGet: { path: /healthz, port: http }
+            httpGet: { path: /healthz, port: metrics }
             periodSeconds: 5
             failureThreshold: 24  # up to 2 minutes for a cold start
           livenessProbe:
-            httpGet: { path: /healthz, port: http }
+            httpGet: { path: /healthz, port: metrics }
             periodSeconds: 10
             failureThreshold: 3
           readinessProbe:
-            httpGet: { path: /healthz, port: http }
+            httpGet: { path: /healthz, port: metrics }
             periodSeconds: 10
           resources:
             {{- toYaml .Values.resources | nindent 12 }}

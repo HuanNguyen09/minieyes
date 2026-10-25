@@ -1,0 +1,5 @@
+apiVersion: v2
+name: platform
+description: Cloud ingress layer for MiniEyes - Traefik, cert-manager, TLS ingresses and auth (#40)
+type: application
+version: 0.1.0

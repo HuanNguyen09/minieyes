@@ -1,0 +1,48 @@
+suite: platform applications
+templates:
+  - apps.yaml
+release:
+  name: platform
+  namespace: argocd
+set:
+  baseDomain: 203-0-113-10.sslip.io
+  traefik:
+    sourceRanges: [198.51.100.7/32, 203.0.113.0/28]
+tests:
+  - it: installs a pinned Traefik behind an NLB reachable only from the edge EIP and admin CIDR
+    documentSelector:
+      path: metadata.name
+      value: traefik
+    asserts:
+      - equal:
+          path: spec.source.targetRevision
+          value: 41.6.1
+      - equal:
+          path: spec.source.helm.valuesObject.service.spec.loadBalancerSourceRanges
+          value: [198.51.100.7/32, 203.0.113.0/28]
+      - equal:
+          path: spec.source.helm.valuesObject.service.annotations["service.beta.kubernetes.io/aws-load-balancer-type"]
+          value: nlb
+
+  - it: installs a pinned cert-manager with its CRDs first
+    documentSelector:
+      path: metadata.name
+      value: cert-manager
+    asserts:
+      - equal:
+          path: spec.source.targetRevision
+          value: v1.21.2
+      - equal:
+          path: spec.source.helm.valuesObject.crds.enabled
+          value: true
+      - equal:
+          path: metadata.annotations["argocd.argoproj.io/sync-wave"]
+          value: "-1"
+
+  - it: refuses to open the load balancer to the whole internet
+    set:
+      traefik:
+        sourceRanges: [0.0.0.0/0]
+    asserts:
+      - failedTemplate:
+          errorPattern: "must not include 0.0.0.0/0"
