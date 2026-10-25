@@ -1,10 +1,11 @@
-// Grafana Alloy at an edge site (ADR-003, FR-PLT-6, #33).
+// Grafana Alloy at an edge site (ADR-003, FR-PLT-6, #33, #34).
 // Scrapes detector, Triton, node_exporter and kube-state-metrics and
-// remote-writes to the central Prometheus with the external label `site`.
+// remote-writes to the central Prometheus; tails pod logs and pushes them to
+// Loki. Both carry the external label `site`.
 //
 // Environment (set by observability/alloy/values.yaml):
 //   MINIEYES_SITE          site name, e.g. site-01
-//   MINIEYES_BASE_DOMAIN   e.g. 203-0-113-10.sslip.io -> https://metrics.<base_domain>
+//   MINIEYES_BASE_DOMAIN   e.g. 203-0-113-10.sslip.io -> https://metrics.<base_domain>, https://logs.<base_domain>
 //   MINIEYES_PUSH_USER     basic-auth user for metrics. and logs.
 // Files (Kubernetes Secret alloy-push-credentials mounted at /etc/alloy/secrets):
 //   password               basic-auth password
@@ -177,5 +178,96 @@ prometheus.remote_write "central" {
 	// site is offline; samples older than this are dropped.
 	wal {
 		max_keepalive_time = "8h"
+	}
+}
+
+// ------------------------------------------------------------ logs (#34)
+
+// Stream labels stay low-cardinality: site (external), namespace, app, container.
+discovery.relabel "pod_logs" {
+	targets = discovery.kubernetes.pods.targets
+
+	rule {
+		source_labels = ["__meta_kubernetes_pod_container_init"]
+		regex         = "true"
+		action        = "drop"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_namespace"]
+		target_label  = "namespace"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_pod_container_name"]
+		target_label  = "container"
+	}
+
+	// app = app.kubernetes.io/name, else the legacy `app` label
+	rule {
+		source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name"]
+		target_label  = "app"
+	}
+
+	rule {
+		source_labels = ["app", "__meta_kubernetes_pod_label_app"]
+		separator     = ";"
+		regex         = ";(.+)"
+		target_label  = "app"
+	}
+}
+
+// Reads logs through the Kubernetes API: no hostPath on /var/log needed.
+loki.source.kubernetes "pods" {
+	targets    = discovery.relabel.pod_logs.output
+	forward_to = [loki.process.pods.receiver]
+}
+
+loki.process "pods" {
+	forward_to = [loki.write.central.receiver]
+
+	// Detector logs are single-line JSON (apps/detector logs.py): level becomes a
+	// label, camera/zone/event_id structured metadata, so LogQL filters on them
+	// without creating streams: {app="detector"} | camera="cam1"
+	stage.match {
+		selector = "{app=\"detector\"}"
+
+		stage.json {
+			expressions = {
+				level    = "level",
+				camera   = "camera",
+				zone     = "zone",
+				event_id = "event_id",
+			}
+		}
+
+		stage.labels {
+			values = {
+				level = "",
+			}
+		}
+
+		stage.structured_metadata {
+			values = {
+				camera   = "",
+				zone     = "",
+				event_id = "",
+			}
+		}
+	}
+}
+
+loki.write "central" {
+	endpoint {
+		url = string.format("https://logs.%s/loki/api/v1/push", sys.env("MINIEYES_BASE_DOMAIN"))
+
+		basic_auth {
+			username      = sys.env("MINIEYES_PUSH_USER")
+			password_file = "/etc/alloy/secrets/password"
+		}
+	}
+
+	external_labels = {
+		site = sys.env("MINIEYES_SITE"),
 	}
 }

@@ -32,6 +32,7 @@ edge site (k3s)                                   cloud (EKS, namespace monitori
 | `alloy/config.alloy` | Grafana Alloy pipeline for an edge site | `alloy/kustomization.yaml` → ConfigMap `alloy-config` |
 | `alloy/values.yaml` | Helm values for `grafana/alloy` at the edge | Argo CD Application (site) |
 | `alloy/kustomization.yaml` | Renders ConfigMap `alloy-config` from `config.alloy` | Argo CD Application (site) |
+| `loki/values.yaml` | Helm values for `grafana/loki`: single binary, gp3 PVC, 7-day retention | Argo CD Application (cloud) |
 | `edge/kube-state-metrics-values.yaml` | Helm values for `prometheus-community/kube-state-metrics` at the edge | Argo CD Application (site) |
 | `tests/` | pytest: rule structure, runbook links, Alertmanager grouping/inhibition (live) | `make test-rules` |
 
@@ -94,6 +95,31 @@ What Alloy scrapes, and the contract the charts must keep:
 
 Every sample is remote-written with the external label `site=<MINIEYES_SITE>`. The WAL lives on a
 hostPath (`/var/lib/alloy`) so samples buffered during an outage survive an Alloy restart (up to 8 h).
+
+## Logs (Loki)
+
+- **Cloud**: a `loki` Application with the `grafana/loki` chart and `loki/values.yaml` (namespace
+  `monitoring`): single binary, filesystem storage on a 20 Gi gp3 PVC, compactor retention 7 days,
+  structured metadata on, no gateway/caches/canary. The ingress from #40 exposes
+  `https://logs.<base_domain>/loki/api/v1/push` → Service `loki:3100` with basic auth. Grafana's
+  Loki datasource (uid `loki`) is set in the kube-prometheus-stack values.
+- **Edge**: the same Alloy agent tails every pod's logs through the Kubernetes API
+  (`loki.source.kubernetes`) and pushes them with stream labels `site`, `namespace`, `app`
+  (`app.kubernetes.io/name`, else `app`) and `container`, plus `level` for the detector.
+  Detector JSON fields `camera`, `zone`, `event_id` become structured metadata (no new streams).
+
+Saved LogQL queries (issue #34 asks for them in `docs/observability.md`; they live here until that
+page exists):
+
+| Purpose | LogQL |
+|---|---|
+| Detector logs of one camera | `{site="site-01", app="detector"} \| camera="cam1"` |
+| Detector errors at a site | `{site="site-01", app="detector", level="ERROR"}` |
+| Follow one event end to end | `{app="detector"} \| event_id="<uuid>"` |
+| Intrusions per zone (5m) | `sum by (zone) (count_over_time({app="detector"} \| zone!="" [5m]))` |
+| Triton errors | `{site="site-01", app="triton"} \|~ "(?i)error\|failed"` |
+| Error rate per site and app | `sum by (site, app) (rate({level=~"ERROR\|CRITICAL"}[5m]))` |
+| Crash output of a pod's containers | `{site="site-01", namespace="minieyes", container="triton"}` |
 
 ## Tests
 

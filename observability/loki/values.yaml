@@ -1,0 +1,70 @@
+# Values for grafana/loki on EKS: single binary, gp3 PVC, 7-day retention (FR-PLT-6, #34).
+# Push from the edge arrives through https://logs.<base_domain>/loki/api/v1/push
+# (ingress from #40, TLS + basic auth) and lands on the Service loki:3100.
+# Grafana reads it at http://loki.monitoring.svc.cluster.local:3100
+# (kube-prometheus-stack values, additionalDataSources).
+
+deploymentMode: SingleBinary
+
+loki:
+  # Single tenant; authentication is done by the ingress.
+  auth_enabled: false
+  commonConfig:
+    replication_factor: 1
+  storage:
+    type: filesystem
+  schemaConfig:
+    configs:
+      - from: "2026-01-01"
+        store: tsdb
+        object_store: filesystem
+        schema: v13
+        index:
+          prefix: loki_index_
+          period: 24h
+  limits_config:
+    retention_period: 168h # 7 days
+    # Detector JSON fields (camera, zone, event_id) arrive as structured metadata.
+    allow_structured_metadata: true
+    reject_old_samples: true
+    reject_old_samples_max_age: 168h
+    ingestion_rate_mb: 4
+    ingestion_burst_size_mb: 8
+  compactor:
+    retention_enabled: true
+    delete_request_store: filesystem
+
+singleBinary:
+  replicas: 1
+  persistence:
+    enabled: true
+    storageClass: gp3
+    size: 20Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 1Gi
+
+# Single-binary mode: no simple-scalable or distributed components.
+read:
+  replicas: 0
+write:
+  replicas: 0
+backend:
+  replicas: 0
+
+# Not needed for a lab-sized single binary.
+gateway:
+  enabled: false
+chunksCache:
+  enabled: false
+resultsCache:
+  enabled: false
+lokiCanary:
+  enabled: false
+test:
+  enabled: false
+minio:
+  enabled: false
