@@ -1,4 +1,14 @@
 ---
+# `sshd -t` needs the privilege separation directory. Ubuntu 24.04 starts sshd through
+# ssh.socket, so /run/sshd may not exist until the first connection (or in a container).
+- name: Ensure the sshd privilege separation directory exists
+  ansible.builtin.file:
+    path: /run/sshd
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
 # Ubuntu's sshd_config includes sshd_config.d/*.conf first and sshd keeps the
 # first value it reads, so a "00-" prefix wins over 50-cloud-init.conf.
 - name: Install the SSH hardening drop-in
