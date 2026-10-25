@@ -34,3 +34,8 @@ __pycache__/
 Thumbs.db
 .vscode/
 .idea/
+
+# test artefacts
+.coverage
+.coverage.*
+htmlcov/

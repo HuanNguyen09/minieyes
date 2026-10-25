@@ -123,6 +123,7 @@ Pure domain modules (`zones`, `postprocess`, `debounce`, `backoff`) have no I/O 
 |---|---|---|
 | `minieyes_camera_up` | gauge | `camera` |
 | `minieyes_frames_total` | counter | `camera` |
+| `minieyes_frames_dropped_total` | counter | `camera` |
 | `minieyes_inference_seconds` | histogram | `camera` |
 | `minieyes_detections_total` | counter | `camera` |
 | `minieyes_events_total` | counter | `camera`, `zone` |
