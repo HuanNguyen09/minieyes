@@ -4,11 +4,12 @@ import pytest
 from fakes import FakeNow
 from fastapi.testclient import TestClient
 from prometheus_client import CollectorRegistry
-from sqlalchemy import create_engine, func, select
+from sqlalchemy import create_engine, func, select, text
 from sqlalchemy.pool import StaticPool
 
 from minieyes_api.app import create_app
 from minieyes_api.db import events, metadata
+from minieyes_api.migrate import upgrade
 from minieyes_api.settings import Settings
 
 KEY_SITE_01 = "key-for-site-01"
@@ -39,12 +40,30 @@ def count_rows(engine) -> int:
         return conn.execute(select(func.count()).select_from(events)).scalar_one()
 
 
-@pytest.fixture
-def engine():
-    engine = create_engine(
-        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
-    )
-    metadata.create_all(engine)
+@pytest.fixture(scope="session")
+def postgres_url():
+    """A throwaway Postgres 16, migrated with Alembic exactly like production."""
+    from testcontainers.community.postgres import PostgresContainer
+
+    with PostgresContainer("postgres:16-alpine", driver="psycopg") as pg:
+        url = pg.get_connection_url()
+        upgrade(url)
+        yield url
+
+
+# Every test that uses `engine` runs on SQLite; with `-m integration` it also runs on Postgres,
+# so both backends are held to the same contract.
+@pytest.fixture(params=["sqlite", pytest.param("postgres", marks=pytest.mark.integration)])
+def engine(request):
+    if request.param == "sqlite":
+        engine = create_engine(
+            "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
+        )
+        metadata.create_all(engine)
+    else:
+        engine = create_engine(request.getfixturevalue("postgres_url"))
+        with engine.begin() as conn:
+            conn.execute(text("TRUNCATE events RESTART IDENTITY"))
     yield engine
     engine.dispose()
 

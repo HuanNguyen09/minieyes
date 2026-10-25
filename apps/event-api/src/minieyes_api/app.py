@@ -6,12 +6,15 @@ from typing import Annotated
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Response
 from fastapi.exceptions import RequestValidationError
-from prometheus_client import CollectorRegistry
+from fastapi.responses import PlainTextResponse
+from prometheus_client import CONTENT_TYPE_LATEST, CollectorRegistry, generate_latest
 from pydantic import AwareDatetime
-from sqlalchemy import Engine
+from sqlalchemy import Engine, text
+from sqlalchemy.exc import SQLAlchemyError
 
 from minieyes_api import cursor as cursors
 from minieyes_api.auth import KeyRing
+from minieyes_api.metrics import instrument
 from minieyes_api.repository import EventFilter, EventRepository
 from minieyes_api.schemas import EventIn, EventOut, EventPage
 from minieyes_api.settings import Settings
@@ -27,6 +30,8 @@ def create_app(
     now: Callable[[], datetime] = lambda: datetime.now(UTC),
 ) -> FastAPI:
     app = FastAPI(title="MiniEyes Event API")
+    registry = registry if registry is not None else CollectorRegistry()
+    instrument(app, registry)
     keys = KeyRing(settings.api_keys)
     repo = EventRepository(engine)
 
@@ -37,6 +42,27 @@ def create_app(
         return site
 
     Site = Annotated[str, Depends(caller_site)]
+
+    @app.get("/healthz")
+    def healthz() -> dict:
+        """Liveness: the process answers. Never touches the database, so a database outage
+        does not make Kubernetes restart every API pod."""
+        return {"status": "ok"}
+
+    @app.get("/metrics", include_in_schema=False)
+    def metrics() -> PlainTextResponse:
+        return PlainTextResponse(generate_latest(registry), media_type=CONTENT_TYPE_LATEST)
+
+    @app.get("/readyz")
+    def readyz(response: Response) -> dict:
+        """Readiness: only route traffic here while the database answers."""
+        try:
+            with engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+        except (OSError, SQLAlchemyError):
+            response.status_code = 503
+            return {"status": "database unreachable"}
+        return {"status": "ready"}
 
     @app.post("/events", status_code=201)
     def post_event(event: EventIn, site: Site, response: Response) -> EventOut:
