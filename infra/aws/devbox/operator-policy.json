@@ -4,36 +4,65 @@
     {
       "Sid": "NoBedrockOrPaidAiModels",
       "Effect": "Deny",
-      "Action": ["bedrock:*", "bedrock-agentcore:*", "sagemaker:*", "aws-marketplace:*", "q:*", "qbusiness:*"],
+      "Action": [
+        "bedrock:*",
+        "bedrock-agentcore:*",
+        "sagemaker:*",
+        "aws-marketplace:*",
+        "q:*",
+        "qbusiness:*"
+      ],
       "Resource": "*"
     },
     {
       "Sid": "OnlySingapore",
       "Effect": "Deny",
-      "NotAction": ["sts:GetCallerIdentity"],
+      "NotAction": [
+        "sts:GetCallerIdentity"
+      ],
       "Resource": "*",
-      "Condition": {"StringNotEquals": {"aws:RequestedRegion": "ap-southeast-1"}}
+      "Condition": {
+        "StringNotEquals": {
+          "aws:RequestedRegion": "ap-southeast-1"
+        }
+      }
     },
     {
       "Sid": "SeeInstances",
       "Effect": "Allow",
-      "Action": ["ec2:DescribeInstances", "ec2:DescribeInstanceStatus", "ssm:DescribeInstanceInformation",
-                 "ssm:DescribeSessions", "ssm:GetConnectionStatus"],
+      "Action": [
+        "ec2:DescribeInstances",
+        "ec2:DescribeInstanceStatus",
+        "ssm:DescribeInstanceInformation",
+        "ssm:DescribeSessions",
+        "ssm:GetConnectionStatus"
+      ],
       "Resource": "*"
     },
     {
       "Sid": "StartAndStopOnlyTheDevBox",
       "Effect": "Allow",
-      "Action": ["ec2:StartInstances", "ec2:StopInstances"],
+      "Action": [
+        "ec2:StartInstances",
+        "ec2:StopInstances"
+      ],
       "Resource": "arn:aws:ec2:ap-southeast-1:*:instance/*",
-      "Condition": {"StringEquals": {"aws:ResourceTag/minieyes:role": "devbox"}}
+      "Condition": {
+        "StringEquals": {
+          "aws:ResourceTag/minieyes:role": "devbox"
+        }
+      }
     },
     {
       "Sid": "ShellOnlyOnTheDevBox",
       "Effect": "Allow",
       "Action": "ssm:StartSession",
       "Resource": "arn:aws:ec2:ap-southeast-1:*:instance/*",
-      "Condition": {"StringEquals": {"ssm:resourceTag/minieyes:role": "devbox"}}
+      "Condition": {
+        "StringEquals": {
+          "ssm:resourceTag/minieyes:role": "devbox"
+        }
+      }
     },
     {
       "Sid": "SessionDocuments",
@@ -47,8 +76,39 @@
     {
       "Sid": "OwnSessionsOnly",
       "Effect": "Allow",
-      "Action": ["ssm:TerminateSession", "ssm:ResumeSession"],
+      "Action": [
+        "ssm:TerminateSession",
+        "ssm:ResumeSession"
+      ],
       "Resource": "arn:aws:ssm:ap-southeast-1:*:session/${aws:username}-*"
+    },
+    {
+      "Sid": "RunCommandsOnlyOnTheDevBox",
+      "Effect": "Allow",
+      "Action": "ssm:SendCommand",
+      "Resource": "arn:aws:ec2:ap-southeast-1:*:instance/*",
+      "Condition": {
+        "StringEquals": {
+          "ssm:resourceTag/minieyes:role": "devbox"
+        }
+      }
+    },
+    {
+      "Sid": "OnlyTheShellScriptDocument",
+      "Effect": "Allow",
+      "Action": "ssm:SendCommand",
+      "Resource": "arn:aws:ssm:ap-southeast-1::document/AWS-RunShellScript"
+    },
+    {
+      "Sid": "ReadCommandResults",
+      "Effect": "Allow",
+      "Action": [
+        "ssm:GetCommandInvocation",
+        "ssm:ListCommandInvocations",
+        "ssm:ListCommands",
+        "ssm:CancelCommand"
+      ],
+      "Resource": "*"
     }
   ]
 }
