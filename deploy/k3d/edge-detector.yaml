@@ -1,0 +1,12 @@
+site: site-01
+image:
+  repository: k3d-minieyes-registry:15000/minieyes-detector
+  tag: dev
+eventApi:
+  url: http://host.k3d.internal:18081
+cooldownSeconds: 5
+networkPolicy:
+  eventApiEgress:  # host port of the cloud cluster instead of HTTPS on a public address
+    cidr: 0.0.0.0/0
+    except: []
+    port: 18081

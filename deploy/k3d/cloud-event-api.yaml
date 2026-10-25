@@ -1,0 +1,12 @@
+# k3d "cloud": one API replica, Postgres on k3s local-path storage, reachable from the edge
+# cluster through host port 18081 -> NodePort 30081 (see nodeport.yaml).
+image:
+  repository: k3d-minieyes-registry:15000/minieyes-event-api
+  tag: dev
+replicaCount: 1
+postgres:
+  storageClass: local-path
+  size: 1Gi
+networkPolicy:
+  # NodePort traffic arrives SNATed from the k3d node addresses (Docker networks)
+  extraIngressCIDRs: [172.16.0.0/12, 192.168.0.0/16]

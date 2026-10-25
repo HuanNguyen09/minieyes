@@ -1,0 +1,3 @@
+image:
+  repository: k3d-minieyes-registry:15000/minieyes-camera-sim
+  tag: dev
