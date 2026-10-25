@@ -7,6 +7,19 @@ override_data {
   }
 }
 
+variables {
+  budget_alert_email = "owner@example.com"
+}
+
+run "budget_alarms_exist_before_anything_else" {
+  command = plan
+
+  assert {
+    condition     = toset(output.budget_names) == toset(["minieyes-monthly-30usd", "minieyes-monthly-60usd"])
+    error_message = "Bootstrap must create the 30 and 60 USD budget alarms."
+  }
+}
+
 run "bucket_is_versioned" {
   command = plan
 
