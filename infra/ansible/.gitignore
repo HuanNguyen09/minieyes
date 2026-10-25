@@ -1,0 +1,6 @@
+# Vault password files must never be committed
+.vault-pass*
+*.vault-pass
+
+# Ansible/Molecule local cache
+.ansible/

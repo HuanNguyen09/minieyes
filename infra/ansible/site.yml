@@ -1,0 +1,27 @@
+---
+# Turns a fresh Ubuntu 24.04 EC2 instance into a MiniEyes edge node.
+# Usage: see docs/runbooks/edge-node-ansible.md
+- name: Configure MiniEyes edge node
+  hosts: edge
+  become: true
+  gather_facts: false
+  pre_tasks:
+    - name: Check that the inventory was fed from Terraform
+      ansible.builtin.assert:
+        that:
+          - ansible_host | length > 0
+          - ansible_host != inventory_hostname
+        fail_msg: >-
+          ansible_host is empty. Export EDGE_HOST from
+          `terraform output -raw edge_public_ip` before running.
+        quiet: true
+      delegate_to: localhost
+      become: false
+
+    - name: Gather facts
+      ansible.builtin.setup:
+  roles:
+    - role: common
+    - role: node_exporter
+    - role: k3s
+    - role: argocd

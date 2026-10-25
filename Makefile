@@ -1,5 +1,5 @@
 # Run from WSL/Linux/macOS or CI. On Windows without make, run the uv commands directly.
-.PHONY: test lint fmt test-helm test-tf test-rules e2e
+.PHONY: test lint fmt test-helm test-tf test-rules test-ansible e2e
 
 test:
 	uv run --package minieyes-detector pytest apps/detector --cov=minieyes_detector --cov-report=term-missing
@@ -44,6 +44,18 @@ test-rules:
 	promtool test rules observability/alerts/tests/*.yaml
 	bash observability/alertmanager/test.sh
 	uv run --no-project --with pytest --with pyyaml pytest observability -q
+
+# Needs ansible-core, ansible-lint, molecule and molecule-plugins[docker] (see
+# docs/runbooks/edge-node-ansible.md). ANSIBLE_CONFIG is explicit because Ansible
+# ignores ansible.cfg in a world-writable directory (WSL /mnt/c checkouts).
+ANSIBLE_DIR := infra/ansible
+ANSIBLE_ENV := ANSIBLE_CONFIG=$(CURDIR)/$(ANSIBLE_DIR)/ansible.cfg
+test-ansible:
+	cd $(ANSIBLE_DIR) && $(ANSIBLE_ENV) ansible-galaxy collection install -r requirements.yml
+	cd $(ANSIBLE_DIR) && $(ANSIBLE_ENV) ansible-lint
+	cd $(ANSIBLE_DIR) && $(ANSIBLE_ENV) ansible-playbook --syntax-check site.yml verify.yml
+	cd $(ANSIBLE_DIR)/roles/common && $(ANSIBLE_ENV) molecule test
+	cd $(ANSIBLE_DIR)/roles/node_exporter && $(ANSIBLE_ENV) molecule test
 
 e2e:  # needs the model exported first: see triton/scripts/export_model.py
 	docker compose up -d --build --wait

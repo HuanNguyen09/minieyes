@@ -1,0 +1,18 @@
+# {{ ansible_managed }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ argocd_namespace }}
+---
+apiVersion: helm.cattle.io/v1
+kind: HelmChart
+metadata:
+  name: argocd
+  namespace: kube-system
+spec:
+  repo: {{ argocd_chart_repo }}
+  chart: argo-cd
+  version: "{{ argocd_chart_version }}"
+  targetNamespace: {{ argocd_namespace }}
+  valuesContent: |-
+    {{ argocd_values | to_nice_yaml(indent=2) | indent(4) }}
