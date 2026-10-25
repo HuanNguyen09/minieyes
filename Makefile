@@ -36,6 +36,8 @@ test-tf:
 		if [ -d $$d/tests ]; then terraform -chdir=$$d test; fi; \
 		tflint --chdir=$$d --config=$(CURDIR)/infra/terraform/.tflint.hcl; \
 	done
+	trivy config --quiet --exit-code 1 --severity HIGH,CRITICAL \
+		--ignorefile infra/terraform/.trivyignore infra/terraform
 
 test-rules:
 	promtool check rules observability/alerts/*.rules.yaml

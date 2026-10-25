@@ -1,0 +1,16 @@
+# Accepted trivy config findings for the lab (see docs/adr/004-public-subnets-no-nat.md).
+
+# State bucket uses SSE-S3 instead of a customer managed KMS key: no key to pay for or lose.
+AWS-0132
+
+# Edge needs outbound HTTPS to ECR, EKS ingress, GitHub and Ubuntu mirrors whose IPs change (NFR-4: outbound only).
+AWS-0104
+
+# EKS secrets use the default AWS-owned envelope encryption; a CMK adds cost and KMS permissions.
+AWS-0039
+
+# Public EKS endpoint is restricted to the admin CIDRs (public_access_cidrs); there is no VPN/bastion.
+AWS-0040
+
+# Public subnets with public IPs instead of a ~45 USD/month NAT Gateway (ADR-004).
+AWS-0164
