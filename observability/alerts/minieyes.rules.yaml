@@ -91,6 +91,20 @@ groups:
           description: "At the trend of the last hour, free space on {{ $labels.mountpoint }} ({{ $labels.device }}) reaches zero within 24 hours."
           runbook_url: "https://github.com/HuanNguyen09/minieyes/blob/main/docs/runbooks/disk-will-fill-in-24h.md"
 
+      # Fast companion of DiskWillFillIn24h: a sudden fill (image re-pull after evictions) reaches
+      # kubelet's 10 % eviction threshold in minutes, long before a 1h trend alert can fire.
+      - alert: DiskAlmostFull
+        expr: |
+          node_filesystem_avail_bytes{fstype!~"tmpfs|ramfs|overlay|squashfs|nsfs|fuse.*"}
+            / node_filesystem_size_bytes{fstype!~"tmpfs|ramfs|overlay|squashfs|nsfs|fuse.*"} < 0.15
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Disk {{ $labels.mountpoint }} on {{ $labels.instance }} at {{ $labels.site }} is almost full"
+          description: "Less than 15% free on {{ $labels.mountpoint }} ({{ $labels.device }}) for 5 minutes. Kubelet starts evicting pods at 10% (DiskPressure)."
+          runbook_url: "https://github.com/HuanNguyen09/minieyes/blob/main/docs/runbooks/disk-will-fill-in-24h.md"
+
   - name: minieyes-fleet
     rules:
       # A site seen in the last hour that sends nothing now. Remote-written

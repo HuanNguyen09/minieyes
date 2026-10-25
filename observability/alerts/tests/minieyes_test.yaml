@@ -242,3 +242,39 @@ tests:
               summary: "Detector at site-01 is down"
               description: "The detector at site-01 has not been scraped for 2 minutes: no camera is being watched there."
               runbook_url: "https://github.com/HuanNguyen09/minieyes/blob/main/docs/runbooks/detector-down.md"
+
+  # ------------------------------------------------------------- DiskAlmostFull
+  # Drill 5 (2026-10-25): a 40 GB edge disk went from 30 % to DiskPressure in minutes; the
+  # trend-based DiskWillFillIn24h (1h window, for 30m) never had time to fire.
+  - name: DiskAlmostFull fires when less than 15 % is free for 5m, not at 20 %
+    interval: 1m
+    input_series:
+      - series: 'node_filesystem_avail_bytes{site="site-01", instance="10.20.1.234:9100", mountpoint="/", device="/dev/root", fstype="ext4"}'
+        values: '20 20 10 10 10 10 10 10 10 10'
+      - series: 'node_filesystem_size_bytes{site="site-01", instance="10.20.1.234:9100", mountpoint="/", device="/dev/root", fstype="ext4"}'
+        values: '100x9'
+      - series: 'node_filesystem_avail_bytes{site="site-01", instance="10.20.1.234:9100", mountpoint="/run", device="tmpfs", fstype="tmpfs"}'
+        values: '1x9'
+      - series: 'node_filesystem_size_bytes{site="site-01", instance="10.20.1.234:9100", mountpoint="/run", device="tmpfs", fstype="tmpfs"}'
+        values: '100x9'
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: DiskAlmostFull
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: DiskAlmostFull
+        exp_alerts: []                   # below 15 % for 3m: pending
+      - eval_time: 8m
+        alertname: DiskAlmostFull
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              site: site-01
+              instance: 10.20.1.234:9100
+              mountpoint: /
+              device: /dev/root
+              fstype: ext4
+            exp_annotations:
+              summary: "Disk / on 10.20.1.234:9100 at site-01 is almost full"
+              description: "Less than 15% free on / (/dev/root) for 5 minutes. Kubelet starts evicting pods at 10% (DiskPressure)."
+              runbook_url: "https://github.com/HuanNguyen09/minieyes/blob/main/docs/runbooks/disk-will-fill-in-24h.md"

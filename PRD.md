@@ -140,6 +140,7 @@ Pure domain modules (`zones`, `postprocess`, `debounce`, `backoff`) have no I/O 
 | `HighInferenceLatency` | p95 `minieyes_inference_seconds` > 0.5 s | 5m |
 | `PodCrashLooping` | restarts increase > 3 in 15m | 0m |
 | `DiskWillFillIn24h` | `predict_linear` of free bytes < 0 in 24h | 30m |
+| `DiskAlmostFull` | less than 15 % free (kubelet evicts at 10 %); catches sudden fills the 24h trend misses | 5m |
 | `EdgeSiteSilent` | site seen in the last hour but sending nothing now: `group by (site) (max_over_time(up[1h])) unless group by (site) (up)` | 5m |
 
 `EdgeSiteSilent` inhibits all other alerts with the same `site`. Because remote-written series stay visible for the 5-minute lookback after the last sample, expect detection about **10 minutes** after a site goes dark; this is acceptable for the lab and documented in the runbook.
