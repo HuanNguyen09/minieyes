@@ -51,9 +51,11 @@ variable "instance_type" {
 }
 
 variable "root_volume_size" {
-  description = "Root volume size in GB (Triton image and models need room)."
+  # 40 GB hit DiskPressure in a drill: evictions garbage-collected the 15 GB Triton image, and
+  # pulling it again filled the disk. 80 GB leaves room for a re-pull next to the running image.
+  description = "Root volume size in GB (Triton image ~15 GB, plus room to re-pull it)."
   type        = number
-  default     = 40
+  default     = 80
 }
 
 variable "ami_ssm_parameter" {

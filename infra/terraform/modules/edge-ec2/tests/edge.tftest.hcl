@@ -58,10 +58,10 @@ run "instance_type_and_encrypted_gp3_root" {
   assert {
     condition = (
       aws_instance.edge.root_block_device[0].volume_type == "gp3" &&
-      aws_instance.edge.root_block_device[0].volume_size == 40 &&
+      aws_instance.edge.root_block_device[0].volume_size == 80 &&
       aws_instance.edge.root_block_device[0].encrypted
     )
-    error_message = "Root volume must be an encrypted 40 GB gp3."
+    error_message = "Root volume must be an encrypted 80 GB gp3 (Triton image 15 GB + re-pulls; 40 GB hit DiskPressure)."
   }
 
   assert {
