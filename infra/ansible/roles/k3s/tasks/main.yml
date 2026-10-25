@@ -18,8 +18,12 @@
     - "{{ k3s_credential_provider_bin_dir }}"
 
 - name: Download ecr-credential-provider (checksum pinned)
+  vars:
+    k3s_ecr_credential_provider_url: >-
+      https://artifacts.k8s.io/binaries/cloud-provider-aws/{{ k3s_ecr_credential_provider_version }}/linux/{{ k3s_arch
+      }}/ecr-credential-provider-linux-{{ k3s_arch }}
   ansible.builtin.get_url:
-    url: "https://artifacts.k8s.io/binaries/cloud-provider-aws/{{ k3s_ecr_credential_provider_version }}/linux/{{ k3s_arch }}/ecr-credential-provider-linux-{{ k3s_arch }}"
+    url: "{{ k3s_ecr_credential_provider_url }}"
     dest: "{{ k3s_credential_provider_bin_dir }}/ecr-credential-provider"
     checksum: "sha256:{{ k3s_ecr_credential_provider_checksums[k3s_arch] }}"
     owner: root
