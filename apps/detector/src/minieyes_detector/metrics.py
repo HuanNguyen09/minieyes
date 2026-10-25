@@ -24,3 +24,14 @@ class DetectorMetrics:
             buckets=(0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5),
             registry=registry,
         )
+        self.events_dropped = Counter(
+            "minieyes_events_dropped_total",
+            "Events that will never be delivered",
+            ["reason"],
+            registry=registry,
+        )
+        self.publish_failures = Counter(
+            "minieyes_publish_failures_total",
+            "Event API calls that failed and will be retried",
+            registry=registry,
+        )
