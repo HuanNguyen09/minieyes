@@ -16,8 +16,28 @@ fmt:
 test-helm:  # needs helm, the helm-unittest binary (or plugin) and kubeconform on PATH
 	bash scripts/check-charts.sh
 
+# Offline only: init without backend, plan-only tests against mock providers. No AWS credentials needed.
+TF_DIRS := infra/terraform/bootstrap \
+	infra/terraform/modules/vpc \
+	infra/terraform/modules/ecr \
+	infra/terraform/modules/github-oidc \
+	infra/terraform/modules/eks \
+	infra/terraform/modules/edge-ec2 \
+	infra/terraform/modules/budgets \
+	infra/terraform/envs/lab \
+	infra/terraform/envs/lab-platform
+
 test-tf:
-	@echo "TODO: terraform fmt/validate/test (#21)"
+	terraform fmt -check -recursive infra/terraform
+	@set -e; for d in $(TF_DIRS); do \
+		echo "== $$d"; \
+		terraform -chdir=$$d init -backend=false -input=false >/dev/null; \
+		terraform -chdir=$$d validate; \
+		if [ -d $$d/tests ]; then terraform -chdir=$$d test; fi; \
+		tflint --chdir=$$d --config=$(CURDIR)/infra/terraform/.tflint.hcl; \
+	done
+	trivy config --quiet --exit-code 1 --severity HIGH,CRITICAL \
+		--ignorefile infra/terraform/.trivyignore infra/terraform
 
 test-rules:
 	promtool check rules observability/alerts/*.rules.yaml
