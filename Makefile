@@ -19,6 +19,8 @@ test-helm:
 # Offline only: init without backend, plan-only tests against mock providers. No AWS credentials needed.
 TF_DIRS := infra/terraform/bootstrap \
 	infra/terraform/modules/vpc \
+	infra/terraform/modules/ecr \
+	infra/terraform/modules/github-oidc \
 	infra/terraform/envs/lab
 
 test-tf:

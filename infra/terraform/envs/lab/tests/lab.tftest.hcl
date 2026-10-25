@@ -4,6 +4,26 @@ mock_provider "aws" {
       names = ["ap-southeast-1a", "ap-southeast-1b", "ap-southeast-1c"]
     }
   }
+
+  mock_data "aws_caller_identity" {
+    defaults = {
+      account_id = "123456789012"
+      arn        = "arn:aws:sts::123456789012:assumed-role/DevBox-MiniEyes-Claude/i-0123456789abcdef0"
+    }
+  }
+
+  mock_data "aws_partition" {
+    defaults = {
+      partition = "aws"
+    }
+  }
+
+  # Policy documents feed role/policy arguments; give the mock valid JSON.
+  mock_data "aws_iam_policy_document" {
+    defaults = {
+      json = "{\"Version\":\"2012-10-17\",\"Statement\":[]}"
+    }
+  }
 }
 
 # apply against the mock provider (nothing real is created) so route attributes are known.
@@ -21,5 +41,26 @@ run "cloud_and_site_vpcs_are_not_peered" {
   assert {
     condition     = module.cloud_vpc.cidr_block != module.site_vpc.cidr_block
     error_message = "cloud-vpc and site-vpc must use different address ranges."
+  }
+}
+
+run "registry_and_ci_roles" {
+  command = apply
+
+  assert {
+    condition = toset(keys(output.ecr_repository_urls)) == toset([
+      "minieyes/detector", "minieyes/event-api", "minieyes/camera-sim", "minieyes/model-yolov8n",
+    ])
+    error_message = "Expected the four project ECR repositories."
+  }
+
+  assert {
+    condition     = output.github_push_role_arn != "" && output.github_plan_role_arn != ""
+    error_message = "GitHub role ARNs must be exported for the CI workflows."
+  }
+
+  assert {
+    condition     = output.account_id == "123456789012"
+    error_message = "account_id output is needed by the GitOps seed."
   }
 }
