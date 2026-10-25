@@ -46,3 +46,19 @@ tests:
     asserts:
       - failedTemplate:
           errorPattern: "must not include 0.0.0.0/0"
+
+  # Traefik chart >= 41 moved redirections under ports.web.http; the ACME HTTP-01 challenge
+  # must bypass the redirect or Let's Encrypt never sees the token on port 80.
+  - it: redirects HTTP to HTTPS except for ACME challenges
+    documentSelector:
+      path: metadata.name
+      value: traefik
+    asserts:
+      - equal:
+          path: spec.source.helm.valuesObject.ports.web.http.redirections.entryPoint
+          value: { to: websecure, scheme: https, permanent: true }
+      - equal:
+          path: spec.source.helm.valuesObject.ports.web.allowACMEByPass
+          value: true
+      - notExists:
+          path: spec.source.helm.valuesObject.ports.web.redirections

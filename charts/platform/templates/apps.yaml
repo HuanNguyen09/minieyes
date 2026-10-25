@@ -54,8 +54,10 @@ spec:
         ports:
           web:
             # HTTP only serves ACME challenges and redirects everything else
-            redirections:
-              entryPoint: { to: websecure, scheme: https, permanent: true }
+            allowACMEByPass: true
+            http:
+              redirections:
+                entryPoint: { to: websecure, scheme: https, permanent: true }
         service:
           annotations:
             service.beta.kubernetes.io/aws-load-balancer-type: nlb
