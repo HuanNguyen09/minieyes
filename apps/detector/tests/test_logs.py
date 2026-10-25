@@ -59,6 +59,8 @@ def test_configure_installs_the_json_formatter_on_the_root_logger():
 
         assert root.level == logging.WARNING
         assert [type(h.formatter) for h in root.handlers] == [JsonFormatter]
+        # one line per HTTP call would drown the intrusion logs
+        assert logging.getLogger("httpx").level == logging.WARNING
     finally:
         root.handlers[:] = saved_handlers
         root.setLevel(saved_level)

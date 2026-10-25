@@ -1,0 +1,84 @@
+# Full MiniEyes stack on one machine: camera-sim -> detector -> event-api -> Postgres.
+# Inference uses OpenVINO Model Server, which speaks the same KServe v2 protocol as Triton
+# (ADR-005). Export the model first: see triton/scripts/export_model.py.
+#
+#   docker compose up -d --build
+#   curl -H "X-API-Key: demo-site-01-key" "http://localhost:18000/events?zone=walkway"
+#
+# Host ports use 18xxx to stay clear of other local apps. The API key below is a throwaway
+# demo key for local use only.
+
+name: minieyes
+
+x-demo-key: &demo-key demo-site-01-key
+
+services:
+  postgres:
+    image: postgres:16.15-alpine
+    environment:
+      POSTGRES_USER: minieyes
+      POSTGRES_PASSWORD: minieyes
+      POSTGRES_DB: minieyes
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U minieyes -d minieyes"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  migrate:
+    build: { context: ., dockerfile: apps/event-api/Dockerfile }
+    image: minieyes-event-api:dev
+    entrypoint: ["python", "-m", "minieyes_api.migrate"]
+    environment:
+      MINIEYES_DATABASE_URL: postgresql+psycopg://minieyes:minieyes@postgres:5432/minieyes
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: "no"
+
+  event-api:
+    image: minieyes-event-api:dev
+    environment:
+      MINIEYES_DATABASE_URL: postgresql+psycopg://minieyes:minieyes@postgres:5432/minieyes
+      # sha256("demo-site-01-key")
+      MINIEYES_API_KEYS: '{"site-01": "7adfed9cea372dd4eba4df8ede2598ceab02cc7d48782f25a380caffd5f98936"}'
+    ports: ["18000:8000"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+  inference:
+    image: openvino/model_server:2026.3.1
+    command:
+      - --model_name=yolov8n
+      - --model_path=/models/yolov8n
+      - --port=9000
+      - --rest_port=8001
+    volumes:
+      - ./triton/model_repository/yolov8n:/models/yolov8n:ro
+    ports: ["18001:8001"]
+
+  camera-sim:
+    build: camera-sim
+    image: minieyes-camera-sim:dev
+    ports: ["18554:8554"]
+
+  detector:
+    build: { context: ., dockerfile: apps/detector/Dockerfile }
+    image: minieyes-detector:dev
+    environment:
+      MINIEYES_SITE: site-01
+      MINIEYES_CAMERAS: cam1=rtsp://camera-sim:8554/cam1
+      MINIEYES_TRITON_URL: inference:9000
+      MINIEYES_EVENT_API_URL: http://event-api:8000
+      MINIEYES_API_KEY: *demo-key
+      MINIEYES_ZONES_FILE: /config/zones.yaml
+      # short cooldown so the demo and e2e tests see events every few seconds
+      MINIEYES_COOLDOWN_SECONDS: "5"
+    volumes:
+      - ./deploy/compose/zones.yaml:/config/zones.yaml:ro
+    ports: ["18080:8080"]
+    depends_on: [camera-sim, inference]
+
+volumes:
+  pgdata:

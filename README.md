@@ -117,6 +117,23 @@ Without `make` (e.g. Git Bash on Windows): `uv run --package minieyes-detector p
 
 Test markers: unit tests run by default; `-m integration` needs Docker; `-m e2e` needs the compose stack.
 
+### Run the whole stack locally
+
+```bash
+# once: export YOLOv8n to ONNX (not committed; AGPL-3.0)
+uv run --no-project --python 3.12 --with ultralytics==8.3.40 --with torch==2.5.1 \
+    --with torchvision==0.20.1 --with onnx==1.17.0 --with onnxslim==0.1.42 \
+    python triton/scripts/export_model.py
+
+docker compose up -d --build --wait     # camera-sim, OVMS, detector, event-api, Postgres
+curl -H "X-API-Key: demo-site-01-key" "http://localhost:18000/events?zone=walkway"
+curl -s http://localhost:18080/metrics | grep minieyes_
+make e2e                                # 3 end-to-end tests, ~2.5 min
+```
+
+Locally the model is served by OpenVINO Model Server, which speaks the same KServe v2 protocol
+as Triton ([ADR-005](docs/adr/005-ovms-for-local-and-ci-inference.md)); the clusters run Triton.
+
 ## Design decisions
 
 - [ADR-001 — Run the lab on AWS](docs/adr/001-aws.md)

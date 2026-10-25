@@ -25,5 +25,6 @@ test-rules:
 	bash observability/alertmanager/test.sh
 	uv run --no-project --with pytest --with pyyaml pytest observability -q
 
-e2e:
-	@echo "TODO: docker compose up + pytest -m e2e (#17)"
+e2e:  # needs the model exported first: see triton/scripts/export_model.py
+	docker compose up -d --build --wait
+	uv run --no-project --with pytest --with httpx pytest tests/e2e -m e2e -v

@@ -1,0 +1,7 @@
+# Demo red zone for the camera-sim video (768x432): the lower half of the frame, where people
+# walk. A person is inside when the bottom-centre of their box (their feet) is in the polygon.
+cameras:
+  cam1:
+    zones:
+      - name: walkway
+        polygon: [[0, 250], [768, 250], [768, 432], [0, 432]]
