@@ -1,0 +1,66 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadIam",
+      "Effect": "Allow",
+      "Action": ["iam:Get*", "iam:List*"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ManageOnlyMiniEyesRolesAndPolicies",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateRole", "iam:DeleteRole", "iam:UpdateRole", "iam:UpdateAssumeRolePolicy",
+        "iam:TagRole", "iam:UntagRole",
+        "iam:AttachRolePolicy", "iam:DetachRolePolicy",
+        "iam:PutRolePolicy", "iam:DeleteRolePolicy",
+        "iam:CreatePolicy", "iam:DeletePolicy", "iam:CreatePolicyVersion",
+        "iam:DeletePolicyVersion", "iam:TagPolicy", "iam:UntagPolicy",
+        "iam:CreateInstanceProfile", "iam:DeleteInstanceProfile",
+        "iam:AddRoleToInstanceProfile", "iam:RemoveRoleFromInstanceProfile",
+        "iam:TagInstanceProfile", "iam:PassRole"
+      ],
+      "Resource": [
+        "arn:aws:iam::*:role/minieyes-*",
+        "arn:aws:iam::*:policy/minieyes-*",
+        "arn:aws:iam::*:instance-profile/minieyes-*"
+      ]
+    },
+    {
+      "Sid": "OidcProvidersForGitHubAndEks",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateOpenIDConnectProvider", "iam:DeleteOpenIDConnectProvider",
+        "iam:UpdateOpenIDConnectProviderThumbprint", "iam:TagOpenIDConnectProvider",
+        "iam:AddClientIDToOpenIDConnectProvider"
+      ],
+      "Resource": [
+        "arn:aws:iam::*:oidc-provider/token.actions.githubusercontent.com",
+        "arn:aws:iam::*:oidc-provider/oidc.eks.ap-southeast-1.amazonaws.com/*"
+      ]
+    },
+    {
+      "Sid": "ServiceLinkedRolesAwsNeeds",
+      "Effect": "Allow",
+      "Action": "iam:CreateServiceLinkedRole",
+      "Resource": "*",
+      "Condition": {"StringEquals": {"iam:AWSServiceName": [
+        "eks.amazonaws.com", "eks-nodegroup.amazonaws.com",
+        "autoscaling.amazonaws.com", "elasticloadbalancing.amazonaws.com",
+        "spot.amazonaws.com"
+      ]}}
+    },
+    {
+      "Sid": "NeverGrantAdminToMiniEyesRoles",
+      "Effect": "Deny",
+      "Action": "iam:AttachRolePolicy",
+      "Resource": "*",
+      "Condition": {"ArnLike": {"iam:PolicyARN": [
+        "arn:aws:iam::aws:policy/AdministratorAccess",
+        "arn:aws:iam::aws:policy/IAMFullAccess",
+        "arn:aws:iam::aws:policy/PowerUserAccess"
+      ]}}
+    }
+  ]
+}
