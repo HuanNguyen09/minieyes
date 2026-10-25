@@ -141,3 +141,15 @@ tests:
       - equal:
           path: metadata.annotations["argocd.argoproj.io/sync-wave"]
           value: "1"
+
+  # An HPA in an earlier wave than its Deployment is Degraded ("target not found") and Argo CD
+  # never reaches the Deployment's wave.
+  - it: syncs the HPA after the Deployment it scales
+    template: hpa.yaml
+    set:
+      autoscaling:
+        enabled: true
+    asserts:
+      - equal:
+          path: metadata.annotations["argocd.argoproj.io/sync-wave"]
+          value: "2"
