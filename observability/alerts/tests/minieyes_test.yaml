@@ -1,0 +1,219 @@
+# promtool unit tests for observability/alerts/minieyes.rules.yaml (PRD §7.3).
+# Run: promtool test rules observability/alerts/tests/*.yaml
+# Every expected alert lists its full label set and annotations, so these tests
+# also prove that each alert carries `severity`, `site` and `runbook_url`.
+rule_files:
+  - ../minieyes.rules.yaml
+
+evaluation_interval: 15s
+
+tests:
+  # ---------------------------------------------------------------- CameraDown
+  - name: CameraDown fires after 1m of camera_up == 0, not before
+    interval: 1m
+    input_series:
+      - series: 'minieyes_camera_up{site="site-01", camera="cam1"}'
+        values: '1 1 0 0 0 0 0'          # down from t=2m
+      - series: 'minieyes_camera_up{site="site-01", camera="cam2"}'
+        values: '1x6'                    # healthy camera
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: CameraDown
+        exp_alerts: []
+      - eval_time: 2m30s                 # down for 30s: pending only
+        alertname: CameraDown
+        exp_alerts: []
+      - eval_time: 3m15s                 # down for > 1m: firing
+        alertname: CameraDown
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              site: site-01
+              camera: cam1
+            exp_annotations:
+              summary: "Camera cam1 at site-01 is down"
+              description: "minieyes_camera_up has been 0 for more than 1 minute: the detector cannot read the RTSP stream of cam1."
+              runbook_url: "https://github.com/HuanNguyen09/minieyes/blob/main/docs/runbooks/camera-down.md"
+
+  # -------------------------------------------------------------------- LowFPS
+  - name: LowFPS fires for a slow camera that is up, not for a fast or a down camera
+    interval: 1m
+    input_series:
+      # 1 fps: 60 frames per minute
+      - series: 'minieyes_frames_total{site="site-01", camera="slow"}'
+        values: '0+60x15'
+      - series: 'minieyes_camera_up{site="site-01", camera="slow"}'
+        values: '1x15'
+      # 5 fps
+      - series: 'minieyes_frames_total{site="site-01", camera="fast"}'
+        values: '0+300x15'
+      - series: 'minieyes_camera_up{site="site-01", camera="fast"}'
+        values: '1x15'
+      # down camera: 0 fps, but that is CameraDown's job
+      - series: 'minieyes_frames_total{site="site-01", camera="down"}'
+        values: '0x15'
+      - series: 'minieyes_camera_up{site="site-01", camera="down"}'
+        values: '0x15'
+    alert_rule_test:
+      - eval_time: 4m                    # slow, but not for 5m yet
+        alertname: LowFPS
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: LowFPS
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              site: site-01
+              camera: slow
+            exp_annotations:
+              summary: "Camera slow at site-01 runs below 2 fps"
+              description: "rate(minieyes_frames_total) has been below 2 frames per second for 5 minutes while the camera is up: inference is too slow or frames are being dropped."
+              runbook_url: "https://github.com/HuanNguyen09/minieyes/blob/main/docs/runbooks/low-fps.md"
+
+  # ------------------------------------------------------- HighInferenceLatency
+  - name: HighInferenceLatency fires when p95 > 0.5s for 5m, not for a fast site
+    interval: 1m
+    input_series:
+      # site-01: every inference lands in (0.5, 1.0] -> p95 ~ 0.98s
+      - series: 'minieyes_inference_seconds_bucket{site="site-01", le="0.1"}'
+        values: '0x15'
+      - series: 'minieyes_inference_seconds_bucket{site="site-01", le="0.5"}'
+        values: '0x15'
+      - series: 'minieyes_inference_seconds_bucket{site="site-01", le="1"}'
+        values: '0+60x15'
+      - series: 'minieyes_inference_seconds_bucket{site="site-01", le="+Inf"}'
+        values: '0+60x15'
+      # site-02: every inference under 0.1s
+      - series: 'minieyes_inference_seconds_bucket{site="site-02", le="0.1"}'
+        values: '0+60x15'
+      - series: 'minieyes_inference_seconds_bucket{site="site-02", le="0.5"}'
+        values: '0+60x15'
+      - series: 'minieyes_inference_seconds_bucket{site="site-02", le="1"}'
+        values: '0+60x15'
+      - series: 'minieyes_inference_seconds_bucket{site="site-02", le="+Inf"}'
+        values: '0+60x15'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: HighInferenceLatency
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: HighInferenceLatency
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              site: site-01
+            exp_annotations:
+              summary: "Inference p95 above 0.5s at site-01"
+              description: "The 95th percentile of minieyes_inference_seconds has been above 0.5 seconds for 5 minutes. Triton is overloaded, throttled or starved of CPU."
+              runbook_url: "https://github.com/HuanNguyen09/minieyes/blob/main/docs/runbooks/high-inference-latency.md"
+
+  # ----------------------------------------------------------- PodCrashLooping
+  - name: PodCrashLooping fires on > 3 restarts in 15m, not on occasional restarts
+    interval: 1m
+    input_series:
+      # edge pod restarting every minute (e.g. Triton OOMKilled)
+      - series: 'kube_pod_container_status_restarts_total{site="site-01", namespace="minieyes", pod="triton-0", container="triton"}'
+        values: '0+1x20'
+      # one restart every 5 minutes: 3 in any 15m window
+      - series: 'kube_pod_container_status_restarts_total{site="site-01", namespace="minieyes", pod="detector-0", container="detector"}'
+        values: '0x4 1x4 2x4 3x4'
+      # cloud pod: kube-state-metrics on EKS has no site label -> site="cloud"
+      - series: 'kube_pod_container_status_restarts_total{namespace="minieyes", pod="event-api-0", container="event-api"}'
+        values: '0+1x20'
+    alert_rule_test:
+      - eval_time: 19m
+        alertname: PodCrashLooping
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              site: site-01
+              namespace: minieyes
+              pod: triton-0
+              container: triton
+            exp_annotations:
+              summary: "Pod minieyes/triton-0 (triton) is crash looping at site-01"
+              description: "Container triton restarted more than 3 times in the last 15 minutes. Check the last state reason (OOMKilled, Error) and the previous container logs."
+              runbook_url: "https://github.com/HuanNguyen09/minieyes/blob/main/docs/runbooks/pod-crash-looping.md"
+          - exp_labels:
+              severity: critical
+              site: cloud
+              namespace: minieyes
+              pod: event-api-0
+              container: event-api
+            exp_annotations:
+              summary: "Pod minieyes/event-api-0 (event-api) is crash looping at cloud"
+              description: "Container event-api restarted more than 3 times in the last 15 minutes. Check the last state reason (OOMKilled, Error) and the previous container logs."
+              runbook_url: "https://github.com/HuanNguyen09/minieyes/blob/main/docs/runbooks/pod-crash-looping.md"
+
+  # --------------------------------------------------------- DiskWillFillIn24h
+  - name: DiskWillFillIn24h fires on a steadily shrinking disk, not on a flat one
+    interval: 5m
+    input_series:
+      # 40 GB disk losing 1 GB every 5 minutes
+      - series: 'node_filesystem_avail_bytes{site="site-01", instance="edge-01", device="/dev/nvme0n1p1", fstype="ext4", mountpoint="/"}'
+        values: '40000000000-1000000000x24'
+      # flat disk at another site
+      - series: 'node_filesystem_avail_bytes{site="site-02", instance="edge-02", device="/dev/nvme0n1p1", fstype="ext4", mountpoint="/"}'
+        values: '20000000000x24'
+      # tmpfs is ignored even when it shrinks
+      - series: 'node_filesystem_avail_bytes{site="site-02", instance="edge-02", device="tmpfs", fstype="tmpfs", mountpoint="/run"}'
+        values: '400000000-10000000x24'
+    alert_rule_test:
+      - eval_time: 30m                   # trend seen, but not for 30m yet
+        alertname: DiskWillFillIn24h
+        exp_alerts: []
+      - eval_time: 60m
+        alertname: DiskWillFillIn24h
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              site: site-01
+              instance: edge-01
+              device: /dev/nvme0n1p1
+              fstype: ext4
+              mountpoint: /
+            exp_annotations:
+              summary: "Disk / on edge-01 at site-01 will fill within 24h"
+              description: "At the trend of the last hour, free space on / (/dev/nvme0n1p1) reaches zero within 24 hours."
+              runbook_url: "https://github.com/HuanNguyen09/minieyes/blob/main/docs/runbooks/disk-will-fill-in-24h.md"
+
+  # ----------------------------------------------------------- EdgeSiteSilent
+  - name: EdgeSiteSilent fires for a site that went dark, never for a healthy or never-seen site
+    interval: 1m
+    input_series:
+      # site-01 reports until t=30m, then nothing (egress removed)
+      - series: 'up{site="site-01", job="detector", instance="10.42.0.10:9000"}'
+        values: '1x30 _x90'
+      - series: 'up{site="site-01", job="node", instance="10.0.1.10:9100"}'
+        values: '1x30 _x90'
+      # site-02 keeps reporting; one target down is not "silent"
+      - series: 'up{site="site-02", job="detector", instance="10.42.0.11:9000"}'
+        values: '1x120'
+      - series: 'up{site="site-02", job="triton", instance="10.42.0.12:8002"}'
+        values: '0x120'
+      # central Prometheus' own targets have no site label
+      - series: 'up{job="prometheus", instance="localhost:9090"}'
+        values: '1x120'
+      # site-03 is never seen at all: nothing to alert on
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: EdgeSiteSilent
+        exp_alerts: []
+      - eval_time: 38m                   # series gone from lookback, alert pending
+        alertname: EdgeSiteSilent
+        exp_alerts: []
+      - eval_time: 45m                   # about 10-15 minutes after going dark
+        alertname: EdgeSiteSilent
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              site: site-01
+            exp_annotations:
+              summary: "Edge site site-01 stopped sending data"
+              description: "site-01 sent metrics within the last hour but has sent nothing for several minutes. The edge node, its network egress or Grafana Alloy is down. Other alerts for this site are inhibited."
+              runbook_url: "https://github.com/HuanNguyen09/minieyes/blob/main/docs/runbooks/edge-site-silent.md"
+      # Known limit (PRD §7.3, runbook): once the 1h window holds no sample the
+      # site is forgotten and the alert resolves.
+      - eval_time: 100m
+        alertname: EdgeSiteSilent
+        exp_alerts: []
