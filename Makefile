@@ -17,7 +17,9 @@ test-helm:
 	@echo "TODO: helm lint + helm-unittest (#19)"
 
 # Offline only: init without backend, plan-only tests against mock providers. No AWS credentials needed.
-TF_DIRS := infra/terraform/bootstrap
+TF_DIRS := infra/terraform/bootstrap \
+	infra/terraform/modules/vpc \
+	infra/terraform/envs/lab
 
 test-tf:
 	terraform fmt -check -recursive infra/terraform
