@@ -4,7 +4,7 @@
 
 MiniEyes is a small, end-to-end **edge AI video analytics platform** built to practise running AI workloads the way production edge fleets run them.
 
-A simulated IP camera streams RTSP video to an **edge node**. A detector runs **YOLO on NVIDIA Triton Inference Server** and raises a **"red-zone intrusion"** event when a person enters a configured danger zone. Events, metrics and logs flow to a central **cloud cluster on Amazon EKS**, where Grafana visualises them and Alertmanager notifies **Telegram**.
+A simulated IP camera streams RTSP video to an **edge node**. A detector runs **YOLO on NVIDIA Triton Inference Server** and raises a **"red-zone intrusion"** event when a person enters a configured danger zone. Events, metrics and logs flow to a central **cloud cluster on Amazon EKS**, where Grafana visualises them and Alertmanager routes alerts (Telegram receiver configured; bot token not yet set).
 
 The AI part is deliberately small (a pretrained model). The focus is the **DevOps platform** around it: infrastructure as code, GitOps delivery to edge sites, observability and failure handling.
 
@@ -79,7 +79,7 @@ CI never talks to a cluster. It pushes images to ECR and commits the new tag to 
 | 3 | Terraform (VPC, EKS, ECR, edge EC2, OIDC; 41 `terraform test`) + Ansible edge (Molecule, idempotent on the real host) | ✅ Done, applied |
 | 4 | Argo CD GitOps to edge and EKS (App of Apps, multi-source, SHA-pinned) | ✅ Done, live |
 | 4 | GitHub Actions CI / release / terraform plan | 🟡 Written and actionlint-clean in [`ci/workflows`](ci/workflows); enabling needs a token with the `workflow` scope |
-| 5 | Observability: Alloy → Prometheus (remote_write) + Loki, 7 alerts with promtool tests, dashboards as code | ✅ Done, live (Telegram needs a bot token) |
+| 5 | Observability: Alloy → Prometheus (remote_write) + Loki, 8 alerts with promtool tests, dashboards as code | ✅ Done, live (Telegram needs a bot token) |
 | 6 | Security, drills, runbooks, postmortems | ✅ All 8 [drills](docs/drills.md) run on the live lab (alert times recorded), 2 [postmortems](docs/postmortems/), secret rotation verified; drills found and fixed 4 real issues |
 
 ### Failure drills
@@ -100,7 +100,7 @@ infra/
   ansible/         roles for the edge node
 observability/     Grafana dashboards (JSON) and Prometheus alert rules
 docs/              architecture decisions, runbooks, postmortems
-.github/workflows/ CI pipelines
+ci/workflows/     CI pipelines (to be moved to .github/workflows/)
 ```
 
 ## Development

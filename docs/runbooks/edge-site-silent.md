@@ -10,7 +10,7 @@ Timing: remote-written series stay visible for the 5-minute lookback, plus `for:
 ## First checks
 1. Can you SSH to the edge EIP? If not, check the EC2 instance status (console or `aws ec2 describe-instance-status`).
 2. On the node: `sudo k3s kubectl -n monitoring get pods` (is Alloy running?) and the Alloy logs for remote_write errors (401 = basic auth, TLS errors, timeouts).
-3. Egress: `curl -sv https://metrics.<base_domain>/` from the node; check the site Security Group egress rules and the NLB source ranges (they must include the edge EIP).
+3. Egress: `curl -sv https://metrics.<base_domain>/` from the node; check the site Security Group egress rules and the Traefik `ipAllowList` source ranges in the GitOps repo (`clusters/cloud/values/platform.yaml`, they must include the edge EIP); a 403 from Traefik means the IP is not allowed.
 4. Are events still reaching the Event API? If yes, only the telemetry path is broken.
 
 ## Fix
