@@ -108,12 +108,13 @@ grafana:
         maxLines: 1000
   persistence:
     enabled: false
+  # 256Mi left Grafana 12 at its limit: health checks timed out and Traefik had no endpoint (2026-10-26).
   resources:
     requests:
       cpu: 50m
-      memory: 128Mi
-    limits:
       memory: 256Mi
+    limits:
+      memory: 512Mi
 
 prometheusOperator:
   resources:
