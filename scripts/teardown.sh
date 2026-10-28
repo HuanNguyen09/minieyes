@@ -38,6 +38,9 @@ cloud=$(kubectl config get-contexts -o name | grep minieyes-lab || true)
 if [ -n "$cloud" ] && kubectl --context "$cloud" get ns argocd >/dev/null 2>&1; then
   echo "1/4 removing GitOps roots (Argo CD deletes the apps, Traefik's NLB with them)"
   kubectl --context "$cloud" -n argocd delete application cloud-root --wait=true --timeout=10m || true
+  # Stop Argo CD before deleting by hand: with selfHeal it recreated the Service (a new NLB) and
+  # the PVCs (new volumes), which then blocked the VPC destroy (2026-10-28).
+  kubectl --context "$cloud" -n argocd scale statefulset,deployment --all --replicas=0 || true
   kubectl --context "$cloud" -n traefik delete svc --all --timeout=5m || true
   echo "2/4 deleting PVCs so their EBS volumes are released"
   kubectl --context "$cloud" delete pvc --all -A --timeout=5m || true
